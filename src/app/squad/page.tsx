@@ -17,7 +17,7 @@ export default function SquadPage() {
             <header className="flex h-16 shrink-0 items-center justify-between border-b px-4 md:px-6">
                 <div className="flex items-center gap-2">
                     <Button asChild variant="outline" size="icon" className="h-8 w-8">
-                        <Link href="/dashboard">
+                        <Link href="/">
                             <ArrowLeft className="h-4 w-4" />
                             <span className="sr-only">Back to Dashboard</span>
                         </Link>
@@ -79,3 +79,5 @@ export default function SquadPage() {
         </div>
     );
 }
+
+    

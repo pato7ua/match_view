@@ -83,7 +83,7 @@ export default function MatchViewDashboard() {
         simulationTime={simulationTime} 
       >
         <Button asChild variant="outline" size="icon" className="h-8 w-8">
-            <Link href="/dashboard">
+            <Link href="/">
                 <ArrowLeft className="h-4 w-4" />
                 <span className="sr-only">Back to Dashboard</span>
             </Link>
@@ -110,3 +110,5 @@ export default function MatchViewDashboard() {
     </div>
   );
 }
+
+    

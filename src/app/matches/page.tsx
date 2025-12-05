@@ -9,7 +9,7 @@ import { ArrowLeft, Calendar, PlusCircle } from "lucide-react";
 import Link from 'next/link';
 import { allMatches, ourTeam, type Match } from '@/lib/teams';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import Image from "next/image";
+import { useState } from "react";
 
 const MatchItem = ({ match, isNextMatch = false }: { match: Match, isNextMatch?: boolean }) => {
     if (!match) return null;
@@ -23,12 +23,19 @@ const MatchItem = ({ match, isNextMatch = false }: { match: Match, isNextMatch?:
     const homeTeam = isHomeGame ? ourTeam : opponent;
     const awayTeam = !isHomeGame ? ourTeam : opponent;
 
+    const [homeTeamLogo, setHomeTeamLogo] = useState(() => `/${homeTeam.logoUrl}`);
+    const [awayTeamLogo, setAwayTeamLogo] = useState(() => `/${awayTeam.logoUrl}`);
+
     const content = (
         <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-4">
                  <div className="flex flex-col items-center gap-1 w-20">
                     <Avatar className="h-10 w-10">
-                        <AvatarImage src={homeTeam.logoUrl} alt={homeTeam.name} />
+                        <AvatarImage 
+                            src={homeTeamLogo} 
+                            alt={homeTeam.name} 
+                            onError={() => setHomeTeamLogo(`/assets/team-icons/${homeTeam.id}.png`)}
+                        />
                         <AvatarFallback>{homeTeam.name.substring(0,2)}</AvatarFallback>
                     </Avatar>
                     <span className="font-semibold text-xs text-center leading-tight">{homeTeam.name}</span>
@@ -45,7 +52,11 @@ const MatchItem = ({ match, isNextMatch = false }: { match: Match, isNextMatch?:
                 </div>
                  <div className="flex flex-col items-center gap-1 w-20">
                     <Avatar className="h-10 w-10">
-                        <AvatarImage src={awayTeam.logoUrl} alt={awayTeam.name} />
+                        <AvatarImage 
+                            src={awayTeamLogo} 
+                            alt={awayTeam.name} 
+                            onError={() => setAwayTeamLogo(`/assets/team-icons/${awayTeam.id}.png`)}
+                        />
                         <AvatarFallback>{awayTeam.name.substring(0,2)}</AvatarFallback>
                     </Avatar>
                     <span className="font-semibold text-xs text-center leading-tight">{awayTeam.name}</span>
@@ -90,7 +101,7 @@ export default function MatchesPage() {
             <header className="flex h-16 shrink-0 items-center justify-between border-b px-4 md:px-6">
                 <div className="flex items-center gap-2">
                     <Button asChild variant="outline" size="icon" className="h-8 w-8">
-                        <Link href="/dashboard">
+                        <Link href="/">
                             <ArrowLeft className="h-4 w-4" />
                             <span className="sr-only">Back to Dashboard</span>
                         </Link>
@@ -121,7 +132,7 @@ export default function MatchesPage() {
                 
                 {restUpcoming.length > 0 && (
                     <section>
-                         <Accordion type="single" collapsible className="w-full space-y-4 border-b-0">
+                         <Accordion type="single" collapsible className="w-full space-y-4 border-b-0" defaultValue="upcoming-matches">
                             <AccordionItem value="upcoming-matches" className="border-b-0">
                                 <AccordionTrigger>
                                     <h2 className="text-xl font-semibold tracking-tight">Further Upcoming</h2>
@@ -147,3 +158,5 @@ export default function MatchesPage() {
         </div>
     );
 }
+
+    

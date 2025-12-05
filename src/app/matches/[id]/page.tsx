@@ -13,7 +13,6 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, ArrowUpDown } from "lucide-react";
 import { allMatches, ourTeam, type Match } from '@/lib/teams';
 import { matchStats, type MatchStat } from '@/lib/match-stats';
-import Image from "next/image";
 
 
 type SortKey = keyof Omit<MatchStat, 'playerId' | 'playerName' | 'playerJersey'> | 'playerName';
@@ -29,6 +28,9 @@ export default function MatchDetailPage() {
     // For now, we use the first set of mock stats for any past game, since we don't have per-match scraped stats.
     const stats = match && new Date(match.date) < new Date() ? matchStats.find(ms => ms.matchId === matchId)?.stats ?? [] : [];
 
+    const [homeTeamLogo, setHomeTeamLogo] = useState('');
+    const [awayTeamLogo, setAwayTeamLogo] = useState('');
+
     if (!match) {
         return notFound();
     }
@@ -40,6 +42,9 @@ export default function MatchDetailPage() {
     
     const homeTeam = isHomeGame ? ourTeam : opponent;
     const awayTeam = !isHomeGame ? ourTeam : opponent;
+
+    if (!homeTeamLogo) setHomeTeamLogo(`/${homeTeam.logoUrl}`);
+    if (!awayTeamLogo) setAwayTeamLogo(`/${awayTeam.logoUrl}`);
 
 
     const sortedStats = useMemo(() => {
@@ -98,14 +103,22 @@ export default function MatchDetailPage() {
                 </div>
                  <div className="flex items-center gap-4">
                     <Avatar className="h-8 w-8">
-                        <AvatarImage src={homeTeam.logoUrl} alt={homeTeam.name} />
+                        <AvatarImage 
+                            src={homeTeamLogo} 
+                            alt={homeTeam.name} 
+                            onError={() => setHomeTeamLogo(`/assets/team-icons/${homeTeam.id}.png`)}
+                        />
                         <AvatarFallback>{homeTeam.name.substring(0,2)}</AvatarFallback>
                     </Avatar>
                      <div className="text-center">
                         <div className="font-bold text-lg">{match.score || new Date(match.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
                      </div>
                     <Avatar className="h-8 w-8">
-                        <AvatarImage src={awayTeam.logoUrl} alt={awayTeam.name} />
+                        <AvatarImage 
+                            src={awayTeamLogo} 
+                            alt={awayTeam.name} 
+                            onError={() => setAwayTeamLogo(`/assets/team-icons/${awayTeam.id}.png`)}
+                        />
                         <AvatarFallback>{awayTeam.name.substring(0,2)}</AvatarFallback>
                     </Avatar>
                      {match.score && <Badge variant={isWinner ? "default" : isLoser ? "destructive" : "secondary"} className="text-xs">
@@ -158,3 +171,5 @@ export default function MatchDetailPage() {
         </div>
     );
 }
+
+    

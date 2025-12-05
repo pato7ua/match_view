@@ -29,11 +29,13 @@ export default function StatsPage() {
                 aVal = a[key];
                 bVal = b[key];
             } else {
-                aVal = a.seasonStats[statView][key];
-                bVal = b.seasonStats[statView][key];
-                 if (statView === 'averages' && key === 'maxSpeed') {
+                if (statView === 'averages' && key === 'maxSpeed') {
+                    // For averages, maxSpeed is still the overall max, not an average of maxes.
                     aVal = a.seasonStats.totals.maxSpeed;
                     bVal = b.seasonStats.totals.maxSpeed;
+                } else {
+                    aVal = a.seasonStats[statView][key];
+                    bVal = b.seasonStats[statView][key];
                 }
             }
             
@@ -82,7 +84,7 @@ export default function StatsPage() {
             <header className="flex h-16 shrink-0 items-center justify-between border-b px-4 md:px-6">
                 <div className="flex items-center gap-2">
                     <Button asChild variant="outline" size="icon" className="h-8 w-8">
-                        <Link href="/dashboard">
+                        <Link href="/">
                             <ArrowLeft className="h-4 w-4" />
                             <span className="sr-only">Back to Dashboard</span>
                         </Link>
@@ -144,3 +146,5 @@ export default function StatsPage() {
         </div>
     );
 }
+
+    
