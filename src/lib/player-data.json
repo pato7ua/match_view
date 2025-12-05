@@ -1,0 +1,41 @@
+{
+    "players": [
+        { "id": 1, "name": "Alex Valera", "jersey": 1, "data": [] },
+        { "id": 2, "name": "Benjaמין Garré", "jersey": 7, "data": [] },
+        { "id": 3, "name": "Carlos Soler", "jersey": 8, "data": [] },
+        { "id": 4, "name": "David Silva", "jersey": 21, "data": [] },
+        { "id": 5, "name": "Esteban Granero", "jersey": 11, "data": [] },
+        {
+            "id": 6,
+            "name": "Ferrán Torres",
+            "jersey": 10,
+            "data": [
+                { "timestamp": 0, "position": { "x": 50, "y": 50 }, "speed": 0, "orientation": 90, "battery": 100 },
+                { "timestamp": 1, "position": { "x": 50.1, "y": 50.5 }, "speed": 1.5, "orientation": 85, "battery": 99.99 },
+                { "timestamp": 2, "position": { "x": 50.3, "y": 51.2 }, "speed": 2.1, "orientation": 80, "battery": 99.98 },
+                { "timestamp": 3, "position": { "x": 50.6, "y": 52.0 }, "speed": 2.5, "orientation": 75, "battery": 99.97 },
+                { "timestamp": 4, "position": { "x": 51.0, "y": 52.9 }, "speed": 3.0, "orientation": 70, "battery": 99.96 },
+                { "timestamp": 5, "position": { "x": 51.5, "y": 53.8 }, "speed": 3.5, "orientation": 65, "battery": 99.95 },
+                { "timestamp": 6, "position": { "x": 52.0, "y": 54.8 }, "speed": 4.0, "orientation": 60, "battery": 99.94 },
+                { "timestamp": 7, "position": { "x": 52.6, "y": 55.9 }, "speed": 4.5, "orientation": 55, "battery": 99.93 },
+                { "timestamp": 8, "position": { "x": 53.2, "y": 57.0 }, "speed": 5.0, "orientation": 50, "battery": 99.92 },
+                { "timestamp": 9, "position": { "x": 53.9, "y": 58.2 }, "speed": 5.5, "orientation": 45, "battery": 99.91 },
+                { "timestamp": 10, "position": { "x": 54.6, "y": 59.4 }, "speed": 6.0, "orientation": 40, "battery": 99.9 }
+            ]
+        },
+        { "id": 7, "name": "Gavi", "jersey": 30, "data": [] },
+        { "id": 8, "name": "Hugo Duro", "jersey": 19, "data": [] },
+        { "id": 9, "name": "Isco Alarcón", "jersey": 22, "data": [] },
+        { "id": 10, "name": "Jesús Navas", "jersey": 16, "data": [] },
+        { "id": 11, "name": "Koke", "jersey": 6, "data": [] },
+        { "id": 12, "name": "Lorenzo Insigne", "jersey": 24, "data": [] },
+        { "id": 13, "name": "Mikel Oyarzabal", "jersey": 18, "data": [] },
+        { "id": 14, "name": "Nabil Fekir", "jersey": 17, "data": [] },
+        { "id": 15, "name": "Óscar Rodríguez", "jersey": 14, "data": [] },
+        { "id": 16, "name": "Pedri", "jersey": 28, "data": [] },
+        { "id": 17, "name": "Quincy Promes", "jersey": 23, "data": [] },
+        { "id": 18, "name": "Raúl de Tomás", "jersey": 9, "data": [] },
+        { "id": 19, "name": "Santi Mina", "jersey": 20, "data": [] },
+        { "id": 20, "name": "Chupadedos", "jersey": 99, "data": [] }
+    ]
+}

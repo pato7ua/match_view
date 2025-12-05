@@ -1,0 +1,302 @@
+[
+  {
+    "jornada": 1,
+    "date": "2025-09-13",
+    "home_team": "MC Los Ángeles",
+    "away_team": "Playas de Orihuela",
+    "score": "2-3",
+    "time": "",
+    "status": "finished",
+    "source": "lapreferente"
+  },
+  {
+    "jornada": 2,
+    "date": "2025-09-21",
+    "home_team": "Playas de Orihuela",
+    "away_team": "Formentera C.F.",
+    "score": "4-1",
+    "time": "",
+    "status": "finished",
+    "source": "lapreferente"
+  },
+  {
+    "jornada": 3,
+    "date": "2025-09-28",
+    "home_team": "Atlético Benejúzar",
+    "away_team": "Playas de Orihuela",
+    "score": "3-1",
+    "time": "",
+    "status": "finished",
+    "source": "lapreferente"
+  },
+  {
+    "jornada": 4,
+    "date": "2025-10-04",
+    "home_team": "Playas de Orihuela",
+    "away_team": "S.C. Torrevieja B",
+    "score": "1-0",
+    "time": "",
+    "status": "finished",
+    "source": "lapreferente"
+  },
+  {
+    "jornada": 5,
+    "date": "2025-10-19",
+    "home_team": "At. Granja Rocamora",
+    "away_team": "Playas de Orihuela",
+    "score": "0-0",
+    "time": "",
+    "status": "finished",
+    "source": "lapreferente"
+  },
+  {
+    "jornada": 6,
+    "date": "2025-10-26",
+    "home_team": "Playas de Orihuela",
+    "away_team": "Bigastro C.F.",
+    "score": "3-3",
+    "time": "",
+    "status": "finished",
+    "source": "lapreferente"
+  },
+  {
+    "jornada": 7,
+    "date": "2025-11-02",
+    "home_team": "C.F. Promesas Elche",
+    "away_team": "Playas de Orihuela",
+    "score": "1-2",
+    "time": "",
+    "status": "finished",
+    "source": "lapreferente"
+  },
+  {
+    "jornada": 8,
+    "date": "2025-11-08",
+    "home_team": "Playas de Orihuela",
+    "away_team": "Sporting Jacarilla",
+    "score": "1-2",
+    "time": "",
+    "status": "finished",
+    "source": "lapreferente"
+  },
+  {
+    "jornada": 9,
+    "date": "2025-11-16",
+    "home_team": "Playas de Orihuela",
+    "away_team": "C.D. Benijófar",
+    "score": "",
+    "time": "11:30",
+    "status": "upcoming",
+    "source": "lapreferente"
+  },
+  {
+    "jornada": 10,
+    "date": "2025-11-22",
+    "home_team": "Orihuela C.F. B",
+    "away_team": "Playas de Orihuela",
+    "score": "",
+    "time": "",
+    "status": "upcoming",
+    "source": "lapreferente"
+  },
+  {
+    "jornada": 11,
+    "date": "2025-11-29",
+    "home_team": "Playas de Orihuela",
+    "away_team": "San Isidro Atlético",
+    "score": "",
+    "time": "",
+    "status": "upcoming",
+    "source": "lapreferente"
+  },
+  {
+    "jornada": 12,
+    "date": "2025-12-13",
+    "home_team": "Benferri C.F. B",
+    "away_team": "Playas de Orihuela",
+    "score": "",
+    "time": "",
+    "status": "upcoming",
+    "source": "lapreferente"
+  },
+  {
+    "jornada": 13,
+    "date": "2025-12-20",
+    "home_team": "Playas de Orihuela",
+    "away_team": "Crevillent F.B.",
+    "score": "",
+    "time": "",
+    "status": "upcoming",
+    "source": "lapreferente"
+  },
+  {
+    "jornada": 14,
+    "date": "2026-01-10",
+    "home_team": "F.B. Redován C.F. B",
+    "away_team": "Playas de Orihuela",
+    "score": "",
+    "time": "",
+    "status": "upcoming",
+    "source": "lapreferente"
+  },
+  {
+    "jornada": 15,
+    "date": "2026-01-17",
+    "home_team": "Playas de Orihuela",
+    "away_team": "C.D. Murada B",
+    "score": "",
+    "time": "",
+    "status": "upcoming",
+    "source": "lapreferente"
+  },
+  {
+    "jornada": 16,
+    "date": "2026-01-24",
+    "home_team": "Playas de Orihuela",
+    "away_team": "MC Los Ángeles",
+    "score": "",
+    "time": "",
+    "status": "upcoming",
+    "source": "lapreferente"
+  },
+  {
+    "jornada": 17,
+    "date": "2026-01-31",
+    "home_team": "Formentera C.F.",
+    "away_team": "Playas de Orihuela",
+    "score": "",
+    "time": "",
+    "status": "upcoming",
+    "source": "lapreferente"
+  },
+  {
+    "jornada": 18,
+    "date": "2026-02-07",
+    "home_team": "Playas de Orihuela",
+    "away_team": "Atlético Benejúzar",
+    "score": "",
+    "time": "",
+    "status": "upcoming",
+    "source": "lapreferente"
+  },
+  {
+    "jornada": 19,
+    "date": "2026-02-14",
+    "home_team": "S.C. Torrevieja B",
+    "away_team": "Playas de Orihuela",
+    "score": "",
+    "time": "",
+    "status": "upcoming",
+    "source": "lapreferente"
+  },
+  {
+    "jornada": 20,
+    "date": "2026-02-21",
+    "home_team": "Playas de Orihuela",
+    "away_team": "At. Granja Rocamora",
+    "score": "",
+    "time": "",
+    "status": "upcoming",
+    "source": "lapreferente"
+  },
+  {
+    "jornada": 21,
+    "date": "2026-02-28",
+    "home_team": "Bigastro C.F.",
+    "away_team": "Playas de Orihuela",
+    "score": "",
+    "time": "",
+    "status": "upcoming",
+    "source": "lapreferente"
+  },
+  {
+    "jornada": 22,
+    "date": "2026-03-07",
+    "home_team": "Playas de Orihuela",
+    "away_team": "C.F. Promesas Elche",
+    "score": "",
+    "time": "",
+    "status": "upcoming",
+    "source": "lapreferente"
+  },
+  {
+    "jornada": 23,
+    "date": "2026-03-14",
+    "home_team": "Sporting Jacarilla",
+    "away_team": "Playas de Orihuela",
+    "score": "",
+    "time": "",
+    "status": "upcoming",
+    "source": "lapreferente"
+  },
+  {
+    "jornada": 24,
+    "date": "2026-03-28",
+    "home_team": "C.D. Benijófar",
+    "away_team": "Playas de Orihuela",
+    "score": "",
+    "time": "",
+    "status": "upcoming",
+    "source": "lapreferente"
+  },
+  {
+    "jornada": 25,
+    "date": "2026-04-11",
+    "home_team": "Playas de Orihuela",
+    "away_team": "Orihuela C.F. B",
+    "score": "",
+    "time": "",
+    "status": "upcoming",
+    "source": "lapreferente"
+  },
+  {
+    "jornada": 26,
+    "date": "2026-04-18",
+    "home_team": "San Isidro Atlético",
+    "away_team": "Playas de Orihuela",
+    "score": "",
+    "time": "",
+    "status": "upcoming",
+    "source": "lapreferente"
+  },
+  {
+    "jornada": 27,
+    "date": "2026-04-25",
+    "home_team": "Playas de Orihuela",
+    "away_team": "Benferri C.F. B",
+    "score": "",
+    "time": "",
+    "status": "upcoming",
+    "source": "lapreferente"
+  },
+  {
+    "jornada": 28,
+    "date": "2026-05-09",
+    "home_team": "Crevillent F.B.",
+    "away_team": "Playas de Orihuela",
+    "score": "",
+    "time": "",
+    "status": "upcoming",
+    "source": "lapreferente"
+  },
+  {
+    "jornada": 29,
+    "date": "2026-05-16",
+    "home_team": "Playas de Orihuela",
+    "away_team": "F.B. Redován C.F. B",
+    "score": "",
+    "time": "",
+    "status": "upcoming",
+    "source": "lapreferente"
+  },
+  {
+    "jornada": 30,
+    "date": "2026-05-23",
+    "home_team": "C.D. Murada B",
+    "away_team": "Playas de Orihuela",
+    "score": "",
+    "time": "",
+    "status": "upcoming",
+    "source": "lapreferente"
+  }
+]
