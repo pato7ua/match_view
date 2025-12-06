@@ -1,14 +1,14 @@
 
 "use client";
 
-import { useState, useEffect, useMemo, FC } from 'react';
+import { useState, useEffect, useMemo, FC, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
-import type { LatLngExpression, Icon } from 'leaflet';
+import type { LatLngExpression, Icon, Map } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
 // --- Types ---
@@ -30,6 +30,7 @@ const Popup = dynamic(() => import('react-leaflet').then(mod => mod.Popup), { ss
 const MapComponent: FC<{ points: LocationData[] }> = ({ points }) => {
     // This state will hold the leaflet icon once it's loaded on the client
     const [icon, setIcon] = useState<Icon | null>(null);
+    const mapRef = useRef<Map | null>(null);
 
     // This useEffect runs once on the client to load the leaflet icon.
     // This prevents server/client mismatches.
@@ -60,7 +61,13 @@ const MapComponent: FC<{ points: LocationData[] }> = ({ points }) => {
     }
 
     return (
-        <MapContainer center={center} zoom={13} scrollWheelZoom={false} className="h-full w-full rounded-2xl">
+        <MapContainer
+            center={center}
+            zoom={13}
+            scrollWheelZoom={false}
+            className="h-full w-full rounded-2xl"
+            whenCreated={mapInstance => { mapRef.current = mapInstance }}
+        >
             <TileLayer
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -133,14 +140,15 @@ export default function PlaygroundPage() {
     const [isClient, setIsClient] = useState(false);
     useEffect(() => {
         setIsClient(true);
+    }, []);
 
+    useEffect(() => {
         if (allPoints.length > 0) {
             // Select random non-zero points only on client to prevent hydration errors.
             const validPoints = allPoints.filter(p => p.lat !== 0 && p.lng !== 0);
             const shuffled = validPoints.sort(() => 0.5 - Math.random());
             setDebugPoints(shuffled.slice(0, 10));
         }
-
     }, [allPoints]);
 
     return (
@@ -214,5 +222,3 @@ export default function PlaygroundPage() {
         </div>
     );
 }
-
-    
