@@ -161,11 +161,8 @@ export default function PlaygroundPage() {
                     .order('created_at', { ascending: true });
 
                 if (error) throw error;
-
-                // Filter out invalid points (lat=0, lng=0)
-                const validData = data.filter(p => p.lat !== 0 && p.lng !== 0);
-
-                if (!validData || validData.length === 0) {
+                
+                if (!data || data.length === 0) {
                     setSessions([]);
                     setIsLoading(false);
                     return;
@@ -174,32 +171,28 @@ export default function PlaygroundPage() {
                 // --- Session detection logic ---
                 const detectedSessions: Session[] = [];
                 let currentSessionPoints: LocationData[] = [];
-                const SESSION_GAP_MINUTES = 30;
 
-                for (const point of validData) {
-                    if (currentSessionPoints.length === 0) {
+                for (const point of data) {
+                    const isZeroPosition = point.lat === 0 && point.lng === 0;
+
+                    if (!isZeroPosition) {
                         currentSessionPoints.push(point);
                     } else {
-                        const lastPointTime = new Date(currentSessionPoints[currentSessionPoints.length - 1].created_at).getTime();
-                        const currentPointTime = new Date(point.created_at).getTime();
-                        const timeDiffMinutes = (currentPointTime - lastPointTime) / (1000 * 60);
-
-                        if (timeDiffMinutes > SESSION_GAP_MINUTES) {
-                            if (currentSessionPoints.length > 1) {
-                                detectedSessions.push({
-                                    startTime: currentSessionPoints[0].created_at,
-                                    endTime: currentSessionPoints[currentSessionPoints.length - 1].created_at,
-                                    pointCount: currentSessionPoints.length,
-                                    points: currentSessionPoints,
-                                });
-                            }
-                            currentSessionPoints = [point];
-                        } else {
-                            currentSessionPoints.push(point);
+                        // End of a session detected
+                        if (currentSessionPoints.length > 1) {
+                            detectedSessions.push({
+                                startTime: currentSessionPoints[0].created_at,
+                                endTime: currentSessionPoints[currentSessionPoints.length - 1].created_at,
+                                pointCount: currentSessionPoints.length,
+                                points: currentSessionPoints,
+                            });
                         }
+                        // Reset for the next session
+                        currentSessionPoints = [];
                     }
                 }
-                // Add the last session if it exists
+                
+                // Add the last session if the data doesn't end with a zero position
                 if (currentSessionPoints.length > 1) {
                      detectedSessions.push({
                         startTime: currentSessionPoints[0].created_at,
@@ -212,7 +205,10 @@ export default function PlaygroundPage() {
                 setSessions(detectedSessions.reverse()); // Show newest first
                 if (detectedSessions.length > 0) {
                     setSelectedSession(detectedSessions[0]);
+                } else {
+                    setSelectedSession(null);
                 }
+
             } catch (err: any) {
                 if (err.message.includes("schema cache")) {
                     setError("Database connection error. Please ensure the 'tracker_logs' table exists and Row Level Security is disabled or a policy is in place for read access.");
