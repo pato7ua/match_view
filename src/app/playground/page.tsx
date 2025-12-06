@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -8,7 +7,6 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft, Loader2, Footprints, TrendingUp, Clock } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import FootballPitch from '@/components/football-pitch';
 import { AnimatePresence, motion } from 'framer-motion';
 
 // --- Types ---
@@ -24,7 +22,7 @@ type LocationData = {
 
 type Session = {
   startTime: string;
-  endTime: string;
+  endTime:string;
   pointCount: number;
   points: LocationData[];
 };
@@ -93,10 +91,13 @@ function normalizePositions(points: LocationData[]): { x: number, y: number }[] 
 
   // Preserve aspect ratio
   const range = Math.max(latRange, lngRange);
+  const xOffset = range > latRange ? (range - latRange) / 2 : 0;
+  const yOffset = range > lngRange ? (range - lngRange) / 2 : 0;
+
 
   return points.map(p => ({
-    x: latRange > 0 ? ((p.lat - minLat) / range * 90) + 5 : 50, // Normalize and center
-    y: lngRange > 0 ? ((p.lng - minLng) / range * 90) + 5 : 50,
+    x: latRange > 0 ? (((p.lat - minLat) + xOffset) / range * 90) + 5 : 50,
+    y: lngRange > 0 ? (((p.lng - minLng) + yOffset) / range * 90) + 5 : 50,
   }));
 };
 
@@ -107,7 +108,7 @@ const RoutePath = ({ points }: { points: {x: number, y: number}[] }) => {
         if (points.length < 2) return "";
         const path = points.map((p, i) => {
             const command = i === 0 ? 'M' : 'L';
-            return `${command} ${p.y}% ${p.x}%`; // Note: SVG x,y maps to visual left,top
+            return `${command} ${p.y}% ${p.x}%`;
         }).join(' ');
         return path;
     }, [points]);
@@ -152,6 +153,7 @@ export default function PlaygroundPage() {
         const fetchAndProcessData = async () => {
             try {
                 setIsLoading(true);
+                setError(null);
                 const { data, error } = await supabase
                     .from('locations')
                     .select('*')
@@ -203,7 +205,11 @@ export default function PlaygroundPage() {
                 
                 setSessions(detectedSessions.reverse()); // Show newest first
             } catch (err: any) {
-                setError(err.message || 'Failed to fetch data.');
+                if (err.message.includes("schema cache")) {
+                    setError("Database connection error. Please ensure the 'locations' table exists and Row Level Security is disabled or a policy is in place for read access.");
+                } else {
+                    setError(err.message || 'Failed to fetch data.');
+                }
             } finally {
                 setIsLoading(false);
             }
@@ -256,9 +262,9 @@ export default function PlaygroundPage() {
                                     <span>Loading sessions...</span>
                                 </div>
                             ) : error ? (
-                                <p className="text-destructive">{error}</p>
+                                <p className="text-sm text-destructive">{error}</p>
                             ) : sessions.length > 0 ? (
-                                <Select onValueChange={handleSessionChange} disabled={sessions.length === 0}>
+                                <Select onValueChange={handleSessionChange} disabled={sessions.length === 0} defaultValue={sessions[0]?.startTime}>
                                     <SelectTrigger>
                                         <SelectValue placeholder="Choose a recorded session..." />
                                     </SelectTrigger>
@@ -305,15 +311,19 @@ export default function PlaygroundPage() {
                     )}
                 </div>
 
-                <div className="md:col-span-2 bg-white/50 dark:bg-primary/10 backdrop-blur-xl border border-white/30 dark:border-primary/20 rounded-2xl shadow-lg p-4 relative overflow-hidden">
+                <div className="md:col-span-2 bg-muted/20 border rounded-2xl shadow-inner p-4 relative overflow-hidden">
                     <div className="relative w-full h-full">
-                        <FootballPitch className="absolute inset-0 w-full h-full object-contain" />
                         <AnimatePresence>
                            {selectedSession && <RoutePath points={normalizedRoute} />}
                         </AnimatePresence>
-                         {!selectedSession && !isLoading && (
+                         {!selectedSession && !isLoading && !error && (
                             <div className="absolute inset-0 flex items-center justify-center">
                                 <p className="text-muted-foreground text-lg">Select a session to see the route</p>
+                            </div>
+                        )}
+                        {error && (
+                             <div className="absolute inset-0 flex items-center justify-center">
+                                <p className="text-destructive text-center max-w-sm">{error}</p>
                             </div>
                         )}
                     </div>
@@ -322,4 +332,3 @@ export default function PlaygroundPage() {
         </div>
     );
 }
-
