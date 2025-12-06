@@ -1,12 +1,15 @@
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, FC } from 'react';
+import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Loader2, MapPin } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { AnimatePresence, motion } from 'framer-motion';
+import type { LatLngExpression } from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
 // --- Types ---
 type LocationData = {
@@ -17,56 +20,57 @@ type LocationData = {
   lng: number;
 };
 
-// --- Helper Functions ---
-function normalizePositions(points: LocationData[]): { x: number, y: number }[] {
-  if (points.length === 0) return [];
+// --- Dynamic Map Component ---
+const MapContainer = dynamic(() => import('react-leaflet').then(mod => mod.MapContainer), { ssr: false });
+const TileLayer = dynamic(() => import('react-leaflet').then(mod => mod.TileLayer), { ssr: false });
+const Marker = dynamic(() => import('react-leaflet').then(mod => mod.Marker), { ssr: false });
+const Popup = dynamic(() => import('react-leaflet').then(mod => mod.Popup), { ssr: false });
 
-  const latitudes = points.map(p => p.lat);
-  const longitudes = points.map(p => p.lng);
+const MapComponent: FC<{ points: LocationData[] }> = ({ points }) => {
+    const center = useMemo(() => {
+        if (points.length === 0) return [51.505, -0.09] as LatLngExpression;
+        const avgLat = points.reduce((acc, p) => acc + p.lat, 0) / points.length;
+        const avgLng = points.reduce((acc, p) => acc + p.lng, 0) / points.length;
+        return [avgLat, avgLng] as LatLngExpression;
+    }, [points]);
+    
+    // Using a dynamic import for the icon to avoid SSR issues with Leaflet
+    const [icon, setIcon] = useState<L.Icon>();
+    useEffect(() => {
+        import('leaflet').then(L => {
+            setIcon(new L.Icon({
+                iconUrl: '/assets/marker-icon.png',
+                iconRetinaUrl: '/assets/marker-icon-2x.png',
+                shadowUrl: '/assets/marker-shadow.png',
+                iconSize: [25, 41],
+                iconAnchor: [12, 41],
+                popupAnchor: [1, -34],
+                shadowSize: [41, 41]
+            }));
+        });
+    }, []);
 
-  const minLat = Math.min(...latitudes);
-  const maxLat = Math.max(...latitudes);
-  const minLng = Math.min(...longitudes);
-  const maxLng = Math.max(...longitudes);
+    if (!icon) {
+        return <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin" /></div>;
+    }
 
-  const latRange = maxLat - minLat;
-  const lngRange = maxLng - minLng;
-
-  if (latRange === 0 && lngRange === 0) {
-    return points.map(() => ({ x: 50, y: 50 }));
-  }
-
-  // Preserve aspect ratio
-  const range = Math.max(latRange, lngRange);
-  const xOffset = range > latRange ? (range - latRange) / 2 : 0;
-  const yOffset = range > lngRange ? (range - lngRange) / 2 : 0;
-
-  return points.map(p => ({
-    x: latRange > 0 ? (((maxLat - p.lat) + xOffset) / range * 90) + 5 : 50, // Invert latitude for correct map orientation
-    y: lngRange > 0 ? (((p.lng - minLng) + yOffset) / range * 90) + 5 : 50,
-  }));
-};
-
-const DebugPoint = ({ point }: { point: {x: number, y: number} }) => {
     return (
-        <motion.div
-            className="absolute"
-            style={{
-                top: `${point.x}%`,
-                left: `${point.y}%`,
-                transform: 'translate(-50%, -50%)',
-            }}
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-        >
-            <MapPin 
-                className="text-accent h-5 w-5"
+        <MapContainer center={center} zoom={13} scrollWheelZoom={false} className="h-full w-full rounded-2xl">
+            <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
-        </motion.div>
+            {points.map((point) => (
+                <Marker key={point.id} position={[point.lat, point.lng]} icon={icon}>
+                    <Popup>
+                        Lat: {point.lat}, Lng: {point.lng} <br />
+                        Time: {new Date(point.created_at).toLocaleString()}
+                    </Popup>
+                </Marker>
+            ))}
+        </MapContainer>
     );
 };
-
 
 export default function PlaygroundPage() {
     const [allPoints, setAllPoints] = useState<LocationData[]>([]);
@@ -125,10 +129,6 @@ export default function PlaygroundPage() {
         fetchAndProcessData();
     }, []);
 
-    const normalizedDebugPoints = useMemo(() => {
-        return normalizePositions(debugPoints);
-    }, [debugPoints]);
-
     return (
         <div className="flex h-dvh w-full flex-col overflow-hidden bg-background">
             <header className="flex h-16 shrink-0 items-center justify-between border-b px-4 md:px-6">
@@ -173,19 +173,19 @@ export default function PlaygroundPage() {
 
                 <div className="md:col-span-2 bg-muted/20 border rounded-2xl shadow-inner p-4 relative overflow-hidden">
                     <div className="relative w-full h-full">
-                        <AnimatePresence>
-                           {normalizedDebugPoints.map((point, index) => (
-                               <DebugPoint key={index} point={point} />
-                           ))}
-                        </AnimatePresence>
-                         {!isLoading && !error && allPoints.length === 0 && (
+                         {isLoading ? (
                             <div className="absolute inset-0 flex items-center justify-center">
-                                <p className="text-muted-foreground text-lg">No data found in 'tracker_logs'.</p>
+                                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                             </div>
-                        )}
-                        {error && (
+                        ) : error ? (
                              <div className="absolute inset-0 flex items-center justify-center">
                                 <p className="text-destructive text-center max-w-sm">{error}</p>
+                            </div>
+                        ) : debugPoints.length > 0 ? (
+                           <MapComponent points={debugPoints} />
+                        ) : (
+                             <div className="absolute inset-0 flex items-center justify-center">
+                                <p className="text-muted-foreground text-lg">No valid (non-zero) data points found.</p>
                             </div>
                         )}
                     </div>
