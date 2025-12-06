@@ -38,12 +38,12 @@ function normalizePositions(points: LocationData[]): { x: number, y: number }[] 
 
   // Preserve aspect ratio
   const range = Math.max(latRange, lngRange);
-  const xOffset = range > lngRange ? (range - lngRange) / 2 : 0;
-  const yOffset = range > latRange ? (range - latRange) / 2 : 0;
+  const xOffset = range > latRange ? (range - latRange) / 2 : 0;
+  const yOffset = range > lngRange ? (range - lngRange) / 2 : 0;
 
   return points.map(p => ({
-    y: lngRange > 0 ? (((p.lng - minLng) + xOffset) / range * 90) + 5 : 50,
-    x: latRange > 0 ? (((maxLat - p.lat) + yOffset) / range * 90) + 5 : 50, // Invert latitude for correct map orientation
+    x: latRange > 0 ? (((maxLat - p.lat) + xOffset) / range * 90) + 5 : 50, // Invert latitude for correct map orientation
+    y: lngRange > 0 ? (((p.lng - minLng) + yOffset) / range * 90) + 5 : 50,
   }));
 };
 
@@ -51,18 +51,17 @@ const DebugPoint = ({ point }: { point: {x: number, y: number} }) => {
     return (
         <motion.div
             className="absolute"
+            style={{
+                top: `${point.x}%`,
+                left: `${point.y}%`,
+                transform: 'translate(-50%, -50%)',
+            }}
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             transition={{ type: 'spring', stiffness: 300, damping: 20 }}
         >
             <MapPin 
-                className="text-accent"
-                style={{
-                    top: `${point.x}%`,
-                    left: `${point.y}%`,
-                    transform: 'translate(-50%, -50%)',
-                    position: 'absolute',
-                }}
+                className="text-accent h-5 w-5"
             />
         </motion.div>
     );
