@@ -29,6 +29,17 @@ type LocationData = {
 
 type Session = LocationData[];
 
+type SessionWithStats = {
+    points: Session;
+    stats: {
+        distance: number; // in km
+        avgSpeed: number; // in km/h
+        durationSeconds: number;
+        pointCount: number;
+        startTime: string;
+    }
+}
+
 const SESSION_GAP_THRESHOLD_SECONDS = 5 * 60; // 5 minutes in seconds
 const POSITION_CHANGE_THRESHOLD_METERS = 10; // GPS jitter threshold
 
@@ -53,41 +64,9 @@ function haversineDistance(coords1: { lat: number; lng: number }, coords2: { lat
 
 // --- Components ---
 
-const SessionStats: FC<{ session: Session | null }> = ({ session }) => {
-    const stats = useMemo(() => {
-        if (!session || session.length < 2) {
-            return { distance: 0, avgSpeed: 0 };
-        }
-
-        let totalDistance = 0; // in meters
-        let totalTimeSeconds = 0;
-
-        for (let i = 1; i < session.length; i++) {
-            const p1 = session[i - 1];
-            const p2 = session[i];
-            if(p1 && p2) {
-              totalDistance += haversineDistance(p1, p2);
-              const timeDiff = (new Date(p2.created_at).getTime() - new Date(p1.created_at).getTime()) / 1000;
-              if (timeDiff > 0) {
-                  totalTimeSeconds += timeDiff;
-              }
-            }
-        }
-        
-        if (totalTimeSeconds <= 0) {
-          return { distance: totalDistance / 1000, avgSpeed: 0 };
-        }
-
-        const avgSpeedMs = totalDistance / totalTimeSeconds; // m/s
-        const avgSpeedKmh = avgSpeedMs * 3.6; // km/h
-
-        return {
-            distance: totalDistance / 1000, // convert to km for display
-            avgSpeed: avgSpeedKmh,
-        };
-    }, [session]);
-    
-    if (!session) return null;
+const SessionStats: FC<{ sessionWithStats: SessionWithStats | null }> = ({ sessionWithStats }) => {
+    if (!sessionWithStats) return null;
+    const { stats } = sessionWithStats;
 
     return (
         <Card className="flex flex-col">
@@ -167,8 +146,8 @@ const MapComponent: FC<{ session: Session | null }> = ({ session }) => {
 
 
 export default function PlaygroundPage() {
-    const [sessions, setSessions] = useState<Session[]>([]);
-    const [selectedSession, setSelectedSession] = useState<Session | null>(null);
+    const [sessions, setSessions] = useState<SessionWithStats[]>([]);
+    const [selectedSession, setSelectedSession] = useState<SessionWithStats | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     
@@ -231,13 +210,41 @@ export default function PlaygroundPage() {
                         identifiedSessions.push(currentSession);
                     }
 
-                    const reversedSessions = identifiedSessions.reverse();
-                    setSessions(reversedSessions); 
-                    if (reversedSessions.length > 0) {
-                        setSelectedSession(reversedSessions[0]);
+                    const sessionsWithStats: SessionWithStats[] = identifiedSessions.map(session => {
+                        let totalDistance = 0;
+                        let totalTimeSeconds = 0;
+                        for (let i = 1; i < session.length; i++) {
+                            const p1 = session[i-1];
+                            const p2 = session[i];
+                            if (p1 && p2) {
+                                totalDistance += haversineDistance(p1, p2);
+                                const timeDiff = (new Date(p2.created_at).getTime() - new Date(p1.created_at).getTime()) / 1000;
+                                if (timeDiff > 0) {
+                                    totalTimeSeconds += timeDiff;
+                                }
+                            }
+                        }
+                        
+                        const avgSpeedMs = totalTimeSeconds > 0 ? totalDistance / totalTimeSeconds : 0;
+                        const avgSpeedKmh = avgSpeedMs * 3.6;
+
+                        return {
+                            points: session,
+                            stats: {
+                                distance: totalDistance / 1000,
+                                avgSpeed: avgSpeedKmh,
+                                durationSeconds: totalTimeSeconds,
+                                pointCount: session.length,
+                                startTime: session[0] ? new Date(session[0].created_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : ''
+                            }
+                        };
+                    }).reverse();
+
+                    setSessions(sessionsWithStats); 
+                    if (sessionsWithStats.length > 0) {
+                        setSelectedSession(sessionsWithStats[0]);
                     }
                 }
-
 
             } catch (err: any) {
                 setError(err.message || 'Failed to fetch data.');
@@ -254,19 +261,11 @@ export default function PlaygroundPage() {
         setIsClient(true);
     }, []);
     
-    const getSessionDuration = (session: Session) => {
-        if (session.length < 2) return "0 minutes";
-        const start = new Date(session[0].created_at);
-        const end = new Date(session[session.length - 1].created_at);
+    const getSessionDuration = (session: SessionWithStats) => {
+        const { durationSeconds } = session.stats;
+        const start = new Date();
+        const end = new Date(start.getTime() + durationSeconds * 1000);
         return formatDistanceStrict(end, start, { roundingMethod: 'round' });
-    }
-
-    const getSessionStartTime = (session: Session) => {
-         if (session.length === 0) return "";
-         return new Date(session[0].created_at).toLocaleString([], {
-             dateStyle: 'medium',
-             timeStyle: 'short'
-         });
     }
 
     return (
@@ -304,15 +303,15 @@ export default function PlaygroundPage() {
                                 ) : error ? (
                                     <p className="text-sm text-destructive">{error}</p>
                                 ) : sessions.length > 0 ? (
-                                    sessions.map((session, index) => (
-                                        <button key={index} onClick={() => setSelectedSession(session)} className="w-full text-left">
-                                            <Card className={`transition-all hover:border-primary ${selectedSession && session.length > 0 && selectedSession[0].id === session[0].id ? 'border-primary bg-primary/10' : ''}`}>
+                                    sessions.map((sessionWithStats, index) => (
+                                        <button key={index} onClick={() => setSelectedSession(sessionWithStats)} className="w-full text-left">
+                                            <Card className={`transition-all hover:border-primary ${selectedSession && selectedSession.points[0].id === sessionWithStats.points[0].id ? 'border-primary bg-primary/10' : ''}`}>
                                                 <CardContent className="p-4">
                                                     <p className="font-semibold">Session {sessions.length - index}</p>
                                                     <div className="text-sm text-muted-foreground mt-2 space-y-1">
-                                                        <div className="flex items-center gap-2"><Clock className="h-3.5 w-3.5" /> <span>{getSessionStartTime(session)}</span></div>
-                                                        <div className="flex items-center gap-2"><MoveRight className="h-3.5 w-3.5" /> <span>Duration: {getSessionDuration(session)}</span></div>
-                                                        <div className="flex items-center gap-2"><Hash className="h-3.5 w-3.5" /> <span>{session.length} data points</span></div>
+                                                        <div className="flex items-center gap-2"><Clock className="h-3.5 w-3.5" /> <span>{sessionWithStats.stats.startTime}</span></div>
+                                                        <div className="flex items-center gap-2"><MoveRight className="h-3.5 w-3.5" /> <span>Duration: {getSessionDuration(sessionWithStats)}</span></div>
+                                                        <div className="flex items-center gap-2"><Hash className="h-3.5 w-3.5" /> <span>{sessionWithStats.stats.pointCount} data points</span></div>
                                                     </div>
                                                 </CardContent>
                                             </Card>
@@ -324,7 +323,7 @@ export default function PlaygroundPage() {
                             </ScrollArea>
                         </CardContent>
                     </Card>
-                    <SessionStats session={selectedSession} />
+                    <SessionStats sessionWithStats={selectedSession} />
                 </div>
 
                 <div className="md:col-span-2 bg-muted/20 border rounded-2xl shadow-inner p-4 relative overflow-hidden">
@@ -339,7 +338,7 @@ export default function PlaygroundPage() {
                                     <p className="text-destructive text-center max-w-sm">{error}</p>
                                 </div>
                             ) : selectedSession ? (
-                               <MapComponent session={selectedSession} />
+                               <MapComponent session={selectedSession.points} />
                             ) : (
                                  <div className="absolute inset-0 flex items-center justify-center">
                                     <p className="text-muted-foreground text-lg">Select a session to view its route.</p>
@@ -355,9 +354,4 @@ export default function PlaygroundPage() {
             </main>
         </div>
     );
-
-    
-
-    
-
-    
+}
