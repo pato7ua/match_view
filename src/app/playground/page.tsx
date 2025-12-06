@@ -16,7 +16,6 @@ import { formatDistanceToNow } from 'date-fns';
 // --- Dynamic Imports for Leaflet components ---
 const MapContainer = dynamic(() => import('react-leaflet').then(mod => mod.MapContainer), { ssr: false });
 const TileLayer = dynamic(() => import('react-leaflet').then(mod => mod.TileLayer), { ssr: false });
-const Marker = dynamic(() => import('react-leaflet').then(mod => mod.Marker), { ssr: false });
 const Polyline = dynamic(() => import('react-leaflet').then(mod => mod.Polyline), { ssr: false });
 
 
@@ -56,26 +55,16 @@ function haversineDistance(coords1: { lat: number; lng: number }, coords2: { lat
 const SessionStats: FC<{ session: Session | null }> = ({ session }) => {
     const stats = useMemo(() => {
         if (!session || session.length < 2) {
-            return { distance: 0, avgSpeed: 0, maxSpeed: 0 };
+            return { distance: 0, avgSpeed: 0 };
         }
 
         let totalDistance = 0;
-        let maxSpeed = 0;
         const totalTimeSeconds = (new Date(session[session.length - 1].created_at).getTime() - new Date(session[0].created_at).getTime()) / 1000;
 
         for (let i = 1; i < session.length; i++) {
             const p1 = session[i - 1];
             const p2 = session[i];
-            const distance = haversineDistance(p1, p2); // km
-            totalDistance += distance;
-            
-            const timeDiffSeconds = (new Date(p2.created_at).getTime() - new Date(p1.created_at).getTime()) / 1000;
-            if (timeDiffSeconds > 0) {
-                const speed = (distance / timeDiffSeconds) * 3600; // km/h
-                if (speed > maxSpeed) {
-                    maxSpeed = speed;
-                }
-            }
+            totalDistance += haversineDistance(p1, p2); // km
         }
 
         const avgSpeed = totalTimeSeconds > 0 ? (totalDistance / totalTimeSeconds) * 3600 : 0; // km/h
@@ -83,7 +72,6 @@ const SessionStats: FC<{ session: Session | null }> = ({ session }) => {
         return {
             distance: totalDistance,
             avgSpeed: avgSpeed,
-            maxSpeed: maxSpeed,
         };
     }, [session]);
     
@@ -94,21 +82,16 @@ const SessionStats: FC<{ session: Session | null }> = ({ session }) => {
             <CardHeader>
                 <CardTitle>Session Stats</CardTitle>
             </CardHeader>
-            <CardContent className="grid grid-cols-3 gap-4 text-center">
+            <CardContent className="grid grid-cols-2 gap-4 text-center">
                  <div className="flex flex-col items-center gap-1">
                     <Waypoints className="h-6 w-6 text-primary" />
                     <p className="text-2xl font-bold">{stats.distance.toFixed(2)}</p>
-                    <p className="text-xs text-muted-foreground">km</p>
+                    <p className="text-xs text-muted-foreground">Total Distance (km)</p>
                 </div>
                  <div className="flex flex-col items-center gap-1">
                     <MoveRight className="h-6 w-6 text-primary" />
                     <p className="text-2xl font-bold">{stats.avgSpeed.toFixed(1)}</p>
-                    <p className="text-xs text-muted-foreground">km/h (avg)</p>
-                </div>
-                <div className="flex flex-col items-center gap-1">
-                    <Gauge className="h-6 w-6 text-primary" />
-                    <p className="text-2xl font-bold">{stats.maxSpeed.toFixed(1)}</p>
-                    <p className="text-xs text-muted-foreground">km/h (max)</p>
+                    <p className="text-xs text-muted-foreground">Avg Speed (km/h)</p>
                 </div>
             </CardContent>
         </Card>
@@ -219,15 +202,21 @@ export default function PlaygroundPage() {
                         const timeDiff = new Date(currentPoint.created_at).getTime() - new Date(prevPoint.created_at).getTime();
 
                         if (timeDiff > SESSION_GAP_THRESHOLD) {
-                            identifiedSessions.push(currentSession);
+                            if (currentSession.length > 1) {
+                                identifiedSessions.push(currentSession);
+                            }
                             currentSession = [];
                         }
                         currentSession.push(currentPoint);
                     }
-                    identifiedSessions.push(currentSession);
-                    setSessions(identifiedSessions.reverse()); // Show newest first
-                    if (identifiedSessions.length > 0) {
-                        setSelectedSession(identifiedSessions[0]);
+                    if (currentSession.length > 1) {
+                        identifiedSessions.push(currentSession);
+                    }
+
+                    const reversedSessions = identifiedSessions.reverse();
+                    setSessions(reversedSessions); 
+                    if (reversedSessions.length > 0) {
+                        setSelectedSession(reversedSessions[0]);
                     }
                 }
 
@@ -341,5 +330,3 @@ export default function PlaygroundPage() {
         </div>
     );
 }
-
-    
