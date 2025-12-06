@@ -8,7 +8,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { BarChart, ChevronRight, List, Signal, PlayCircle, Users, ExternalLink } from 'lucide-react';
+import { BarChart, ChevronRight, List, Signal, PlayCircle, Users, ExternalLink, Map } from 'lucide-react';
 import Link from 'next/link';
 import { upcomingMatches, ourTeam } from '@/lib/teams';
 import Image from 'next/image';
@@ -111,12 +111,20 @@ export default function ManagerDashboard() {
           <h1 className="text-lg font-semibold sm:text-xl md:text-2xl tracking-tight">
             Manager Dashboard
           </h1>
-          <Button asChild variant="outline">
-            <Link href="/match">
-              Live Match View
-              <ChevronRight className="ml-2 h-4 w-4" />
-            </Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button asChild variant="outline">
+                <Link href="/playground">
+                    <Map className="mr-2" />
+                    Playground
+                </Link>
+            </Button>
+            <Button asChild variant="outline">
+                <Link href="/match">
+                Live Match View
+                <ChevronRight className="ml-2 h-4 w-4" />
+                </Link>
+            </Button>
+          </div>
       </header>
       <main className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -209,5 +217,3 @@ export default function ManagerDashboard() {
     </div>
   )
 }
-
-    
