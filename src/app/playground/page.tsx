@@ -66,7 +66,8 @@ function calculateStats(points: LocationData[]) {
         return { ...point, speed };
     });
     
-    const avgSpeed = (totalDistance / ((new Date(points[points.length-1].created_at).getTime() - new Date(points[0].created_at).getTime()) / 1000)) || 0;
+    const totalTimeSeconds = (new Date(points[points.length-1].created_at).getTime() - new Date(points[0].created_at).getTime()) / 1000;
+    const avgSpeed = totalTimeSeconds > 0 ? totalDistance / totalTimeSeconds : 0;
 
     return { totalDistance, maxSpeed, avgSpeed };
 }
@@ -91,13 +92,13 @@ function normalizePositions(points: LocationData[]): { x: number, y: number }[] 
 
   // Preserve aspect ratio
   const range = Math.max(latRange, lngRange);
-  const xOffset = range > latRange ? (range - latRange) / 2 : 0;
-  const yOffset = range > lngRange ? (range - lngRange) / 2 : 0;
+  const xOffset = range > lngRange ? (range - lngRange) / 2 : 0;
+  const yOffset = range > latRange ? (range - latRange) / 2 : 0;
 
 
   return points.map(p => ({
-    x: latRange > 0 ? (((p.lat - minLat) + xOffset) / range * 90) + 5 : 50,
-    y: lngRange > 0 ? (((p.lng - minLng) + yOffset) / range * 90) + 5 : 50,
+    y: lngRange > 0 ? (((p.lng - minLng) + xOffset) / range * 90) + 5 : 50,
+    x: latRange > 0 ? (((maxLat - p.lat) + yOffset) / range * 90) + 5 : 50, // Invert latitude for correct map orientation (north is up)
   }));
 };
 
@@ -160,7 +161,11 @@ export default function PlaygroundPage() {
                     .order('created_at', { ascending: true });
 
                 if (error) throw error;
-                if (!data || data.length === 0) {
+
+                // Filter out invalid points (lat=0, lng=0)
+                const validData = data.filter(p => p.lat !== 0 && p.lng !== 0);
+
+                if (!validData || validData.length === 0) {
                     setSessions([]);
                     return;
                 }
@@ -170,12 +175,13 @@ export default function PlaygroundPage() {
                 let currentSessionPoints: LocationData[] = [];
                 const SESSION_GAP_MINUTES = 30;
 
-                for(let i = 0; i < data.length; i++) {
+                for(let i = 0; i < validData.length; i++) {
+                    const point = validData[i];
                     if (currentSessionPoints.length === 0) {
-                        currentSessionPoints.push(data[i]);
+                        currentSessionPoints.push(point);
                     } else {
                         const lastPointTime = new Date(currentSessionPoints[currentSessionPoints.length - 1].created_at).getTime();
-                        const currentPointTime = new Date(data[i].created_at).getTime();
+                        const currentPointTime = new Date(point.created_at).getTime();
                         const timeDiffMinutes = (currentPointTime - lastPointTime) / (1000 * 60);
 
                         if (timeDiffMinutes > SESSION_GAP_MINUTES) {
@@ -187,9 +193,9 @@ export default function PlaygroundPage() {
                                     points: currentSessionPoints,
                                 });
                             }
-                            currentSessionPoints = [data[i]];
+                            currentSessionPoints = [point];
                         } else {
-                            currentSessionPoints.push(data[i]);
+                            currentSessionPoints.push(point);
                         }
                     }
                 }
@@ -335,3 +341,5 @@ export default function PlaygroundPage() {
         </div>
     );
 }
+
+    
