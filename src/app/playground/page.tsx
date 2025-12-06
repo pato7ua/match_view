@@ -26,8 +26,8 @@ const Marker = dynamic(() => import('react-leaflet').then(mod => mod.Marker), { 
 const Popup = dynamic(() => import('react-leaflet').then(mod => mod.Popup), { ssr: false });
 
 const MapComponent: FC<{ points: LocationData[] }> = ({ points }) => {
-    const [icon, setIcon] = useState<Icon | null>(null);
     const mapRef = useRef<LeafletMap | null>(null);
+    const [icon, setIcon] = useState<Icon | null>(null);
 
     useEffect(() => {
         import('leaflet').then(L => {
