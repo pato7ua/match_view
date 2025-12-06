@@ -8,32 +8,27 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
-import type { LatLngExpression, Icon, Map } from 'leaflet';
+import type { LatLngExpression, Icon, Map as LeafletMap } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
 // --- Types ---
 type LocationData = {
   id: number;
   created_at: string;
-  device_id: string;
   lat: number;
   lng: number;
 };
 
 // --- Dynamic Map Components ---
-// Dynamically import map components to ensure they only run on the client side.
 const MapContainer = dynamic(() => import('react-leaflet').then(mod => mod.MapContainer), { ssr: false });
 const TileLayer = dynamic(() => import('react-leaflet').then(mod => mod.TileLayer), { ssr: false });
 const Marker = dynamic(() => import('react-leaflet').then(mod => mod.Marker), { ssr: false });
 const Popup = dynamic(() => import('react-leaflet').then(mod => mod.Popup), { ssr: false });
 
 const MapComponent: FC<{ points: LocationData[] }> = ({ points }) => {
-    // This state will hold the leaflet icon once it's loaded on the client
     const [icon, setIcon] = useState<Icon | null>(null);
-    const mapRef = useRef<Map | null>(null);
+    const mapRef = useRef<LeafletMap | null>(null);
 
-    // This useEffect runs once on the client to load the leaflet icon.
-    // This prevents server/client mismatches.
     useEffect(() => {
         import('leaflet').then(L => {
             setIcon(new L.Icon({
@@ -55,7 +50,6 @@ const MapComponent: FC<{ points: LocationData[] }> = ({ points }) => {
         return [avgLat, avgLng] as LatLngExpression;
     }, [points]);
     
-    // If the icon isn't loaded yet, show a loader to prevent errors.
     if (!icon) {
         return <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin" /></div>;
     }
@@ -68,18 +62,22 @@ const MapComponent: FC<{ points: LocationData[] }> = ({ points }) => {
             className="h-full w-full rounded-2xl"
             whenCreated={mapInstance => { mapRef.current = mapInstance }}
         >
-            <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
-            {points.map((point) => (
-                <Marker key={point.id} position={[point.lat, point.lng]} icon={icon}>
-                    <Popup>
-                        Lat: {point.lat}, Lng: {point.lng} <br />
-                        Time: {new Date(point.created_at).toLocaleString()}
-                    </Popup>
-                </Marker>
-            ))}
+            {mapRef.current && (
+                <>
+                    <TileLayer
+                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    />
+                    {points.map((point) => (
+                        <Marker key={point.id} position={[point.lat, point.lng]} icon={icon}>
+                            <Popup>
+                                Lat: {point.lat}, Lng: {point.lng} <br />
+                                Time: {new Date(point.created_at).toLocaleString()}
+                            </Popup>
+                        </Marker>
+                    ))}
+                </>
+            )}
         </MapContainer>
     );
 };
@@ -136,20 +134,18 @@ export default function PlaygroundPage() {
         fetchAndProcessData();
     }, []);
 
-    // This state ensures that the map component is only rendered on the client side.
     const [isClient, setIsClient] = useState(false);
     useEffect(() => {
         setIsClient(true);
     }, []);
 
     useEffect(() => {
-        if (allPoints.length > 0) {
-            // Select random non-zero points only on client to prevent hydration errors.
+        if (allPoints.length > 0 && isClient) {
             const validPoints = allPoints.filter(p => p.lat !== 0 && p.lng !== 0);
-            const shuffled = validPoints.sort(() => 0.5 - Math.random());
+            const shuffled = [...validPoints].sort(() => 0.5 - Math.random());
             setDebugPoints(shuffled.slice(0, 10));
         }
-    }, [allPoints]);
+    }, [allPoints, isClient]);
 
     return (
         <div className="flex h-dvh w-full flex-col overflow-hidden bg-background">
@@ -195,7 +191,7 @@ export default function PlaygroundPage() {
 
                 <div className="md:col-span-2 bg-muted/20 border rounded-2xl shadow-inner p-4 relative overflow-hidden">
                     <div className="relative w-full h-full">
-                         {isClient ? ( // Only render the map on the client
+                         {isClient ? (
                             isLoading ? (
                                 <div className="absolute inset-0 flex items-center justify-center">
                                     <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -211,7 +207,7 @@ export default function PlaygroundPage() {
                                     <p className="text-muted-foreground text-lg">No valid (non-zero) data points found.</p>
                                 </div>
                             )
-                         ) : ( // On the server, render a placeholder
+                         ) : (
                             <div className="flex items-center justify-center h-full">
                                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                             </div>
