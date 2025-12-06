@@ -29,15 +29,17 @@ type LocationData = {
 
 type Session = LocationData[];
 
+type SessionStats = {
+    distance: number; // in km
+    avgSpeed: number; // in km/h
+    durationSeconds: number;
+    pointCount: number;
+    startTime: string;
+}
+
 type SessionWithStats = {
     points: Session;
-    stats: {
-        distance: number; // in km
-        avgSpeed: number; // in km/h
-        durationSeconds: number;
-        pointCount: number;
-        startTime: string;
-    }
+    stats: SessionStats;
 }
 
 const SESSION_GAP_THRESHOLD_SECONDS = 5 * 60; // 5 minutes in seconds
@@ -64,9 +66,8 @@ function haversineDistance(coords1: { lat: number; lng: number }, coords2: { lat
 
 // --- Components ---
 
-const SessionStats: FC<{ sessionWithStats: SessionWithStats | null }> = ({ sessionWithStats }) => {
-    if (!sessionWithStats) return null;
-    const { stats } = sessionWithStats;
+const SessionStatsDisplay: FC<{ stats: SessionStats | null }> = ({ stats }) => {
+    if (!stats) return null;
 
     return (
         <Card className="flex flex-col">
@@ -95,17 +96,10 @@ const MapComponent: FC<{ session: Session | null }> = ({ session }) => {
     const mapInstance = useRef<LeafletMap | null>(null);
     const polylineRef = useRef<LeafletPolyline | null>(null);
 
-    const center: LatLngExpression = useMemo(() => {
-        if (!session || session.length === 0) return [51.505, -0.09];
-        const avgLat = session.reduce((acc, p) => acc + p.lat, 0) / session.length;
-        const avgLng = session.reduce((acc, p) => acc + p.lng, 0) / session.length;
-        return [avgLat, avgLng];
-    }, [session]);
-    
     useEffect(() => {
         if (mapRef.current && !mapInstance.current) {
              import('leaflet').then(L => {
-                mapInstance.current = L.map(mapRef.current!).setView(center, 13);
+                mapInstance.current = L.map(mapRef.current!).setView([51.505, -0.09], 13);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                 }).addTo(mapInstance.current);
@@ -202,22 +196,23 @@ export default function PlaygroundPage() {
                             if (currentSession.length > 1) {
                                 identifiedSessions.push(currentSession);
                             }
-                            currentSession = [];
+                            currentSession = [currentPoint];
+                        } else {
+                           currentSession.push(currentPoint);
                         }
-                        currentSession.push(currentPoint);
                     }
                     if (currentSession.length > 1) {
                         identifiedSessions.push(currentSession);
                     }
 
                     const sessionsWithStats: SessionWithStats[] = identifiedSessions.map(session => {
-                        let totalDistance = 0;
+                        let totalDistanceMeters = 0;
                         let totalTimeSeconds = 0;
                         for (let i = 1; i < session.length; i++) {
                             const p1 = session[i-1];
                             const p2 = session[i];
                             if (p1 && p2) {
-                                totalDistance += haversineDistance(p1, p2);
+                                totalDistanceMeters += haversineDistance(p1, p2);
                                 const timeDiff = (new Date(p2.created_at).getTime() - new Date(p1.created_at).getTime()) / 1000;
                                 if (timeDiff > 0) {
                                     totalTimeSeconds += timeDiff;
@@ -225,13 +220,12 @@ export default function PlaygroundPage() {
                             }
                         }
                         
-                        const avgSpeedMs = totalTimeSeconds > 0 ? totalDistance / totalTimeSeconds : 0;
-                        const avgSpeedKmh = avgSpeedMs * 3.6;
+                        const avgSpeedKmh = totalTimeSeconds > 0 ? (totalDistanceMeters / totalTimeSeconds) * 3.6 : 0;
 
                         return {
                             points: session,
                             stats: {
-                                distance: totalDistance / 1000,
+                                distance: totalDistanceMeters / 1000,
                                 avgSpeed: avgSpeedKmh,
                                 durationSeconds: totalTimeSeconds,
                                 pointCount: session.length,
@@ -323,7 +317,7 @@ export default function PlaygroundPage() {
                             </ScrollArea>
                         </CardContent>
                     </Card>
-                    <SessionStats sessionWithStats={selectedSession} />
+                    {selectedSession && <SessionStatsDisplay stats={selectedSession.stats} />}
                 </div>
 
                 <div className="md:col-span-2 bg-muted/20 border rounded-2xl shadow-inner p-4 relative overflow-hidden">
@@ -355,3 +349,5 @@ export default function PlaygroundPage() {
         </div>
     );
 }
+
+    
