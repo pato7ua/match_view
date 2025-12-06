@@ -83,6 +83,7 @@ export default function PlaygroundPage() {
                 const { data, error } = await supabase
                     .from('tracker_logs')
                     .select('*')
+                    .limit(3000) // Fetch up to 3000 records to override the default 1000 limit
                     .order('created_at', { ascending: true });
 
                 if (error) throw error;
