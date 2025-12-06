@@ -167,6 +167,7 @@ export default function PlaygroundPage() {
 
                 if (!validData || validData.length === 0) {
                     setSessions([]);
+                    setIsLoading(false);
                     return;
                 }
                 
@@ -175,8 +176,7 @@ export default function PlaygroundPage() {
                 let currentSessionPoints: LocationData[] = [];
                 const SESSION_GAP_MINUTES = 30;
 
-                for(let i = 0; i < validData.length; i++) {
-                    const point = validData[i];
+                for (const point of validData) {
                     if (currentSessionPoints.length === 0) {
                         currentSessionPoints.push(point);
                     } else {
@@ -199,7 +199,7 @@ export default function PlaygroundPage() {
                         }
                     }
                 }
-                // Add the last session
+                // Add the last session if it exists
                 if (currentSessionPoints.length > 1) {
                      detectedSessions.push({
                         startTime: currentSessionPoints[0].created_at,
@@ -341,5 +341,3 @@ export default function PlaygroundPage() {
         </div>
     );
 }
-
-    
