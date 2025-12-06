@@ -29,7 +29,8 @@ type LocationData = {
 
 type Session = LocationData[];
 
-const SESSION_GAP_THRESHOLD = 5 * 60 * 1000; // 5 minutes in milliseconds
+const SESSION_GAP_THRESHOLD_SECONDS = 5 * 60; // 5 minutes in seconds
+const POSITION_CHANGE_THRESHOLD_METERS = 10; // GPS jitter threshold
 
 // --- Utility Functions ---
 function haversineDistance(coords1: { lat: number; lng: number }, coords2: { lat: number; lng: number }): number {
@@ -210,9 +211,11 @@ export default function PlaygroundPage() {
                         const prevPoint = allData[i - 1];
                         const currentPoint = allData[i];
                         if (!currentPoint || !prevPoint) continue;
-                        const timeDiff = new Date(currentPoint.created_at).getTime() - new Date(prevPoint.created_at).getTime();
+                        
+                        const timeDiffSeconds = (new Date(currentPoint.created_at).getTime() - new Date(prevPoint.created_at).getTime()) / 1000;
+                        const posDiffMeters = haversineDistance(prevPoint, currentPoint);
 
-                        if (timeDiff > SESSION_GAP_THRESHOLD) {
+                        if (timeDiffSeconds > SESSION_GAP_THRESHOLD_SECONDS && posDiffMeters < POSITION_CHANGE_THRESHOLD_METERS) {
                             if (currentSession.length > 1) {
                                 identifiedSessions.push(currentSession);
                             }
@@ -278,17 +281,17 @@ export default function PlaygroundPage() {
                 </div>
             </header>
             <main className="flex-1 grid md:grid-cols-3 gap-6 p-6 overflow-hidden">
-                <div className="md:col-span-1 flex flex-col gap-6">
-                     <Card className="flex-shrink-0">
+                <div className="md:col-span-1 flex flex-col gap-6 overflow-hidden">
+                     <Card className="flex flex-col flex-1 overflow-hidden">
                         <CardHeader>
                             <CardTitle>Tracking Sessions</CardTitle>
                             <CardDescription>
                                 {isLoading ? "Loading sessions..." : `Found ${sessions.length} distinct sessions.`}
                             </CardDescription>
                         </CardHeader>
-                        <CardContent className="flex-1 overflow-hidden max-h-[40vh]">
-                            <ScrollArea className="h-full">
-                                <div className="space-y-4 pr-6">
+                        <CardContent className="flex-1 overflow-y-auto">
+                            <ScrollArea className="h-full pr-6">
+                                <div className="space-y-4">
                                 {isLoading ? (
                                     <div className="flex items-center gap-2 text-muted-foreground">
                                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -348,5 +351,5 @@ export default function PlaygroundPage() {
             </main>
         </div>
     );
-    
 
+    
