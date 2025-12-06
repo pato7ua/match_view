@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -168,17 +169,20 @@ export default function PlaygroundPage() {
                     return;
                 }
                 
-                // --- Session detection logic ---
+                // --- New Session detection logic ---
                 const detectedSessions: Session[] = [];
                 let currentSessionPoints: LocationData[] = [];
-
-                for (const point of data) {
+                
+                for (let i = 0; i < data.length; i++) {
+                    const point = data[i];
                     const isZeroPosition = point.lat === 0 && point.lng === 0;
 
                     if (!isZeroPosition) {
                         currentSessionPoints.push(point);
-                    } else {
-                        // End of a session detected
+                    }
+
+                    // End a session if we hit a zero, OR if it's the last point in the dataset
+                    if (isZeroPosition || i === data.length - 1) {
                         if (currentSessionPoints.length > 1) {
                             detectedSessions.push({
                                 startTime: currentSessionPoints[0].created_at,
@@ -187,19 +191,8 @@ export default function PlaygroundPage() {
                                 points: currentSessionPoints,
                             });
                         }
-                        // Reset for the next session
-                        currentSessionPoints = [];
+                        currentSessionPoints = []; // Reset for the next session
                     }
-                }
-                
-                // Add the last session if the data doesn't end with a zero position
-                if (currentSessionPoints.length > 1) {
-                     detectedSessions.push({
-                        startTime: currentSessionPoints[0].created_at,
-                        endTime: currentSessionPoints[currentSessionPoints.length - 1].created_at,
-                        pointCount: currentSessionPoints.length,
-                        points: currentSessionPoints,
-                    });
                 }
                 
                 setSessions(detectedSessions.reverse()); // Show newest first
@@ -336,4 +329,5 @@ export default function PlaygroundPage() {
             </main>
         </div>
     );
-}
+
+    
