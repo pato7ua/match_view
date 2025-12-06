@@ -60,13 +60,17 @@ const SessionStats: FC<{ session: Session | null }> = ({ session }) => {
         }
 
         let totalDistance = 0; // in meters
-        const totalTimeSeconds = (new Date(session[session.length - 1].created_at).getTime() - new Date(session[0].created_at).getTime()) / 1000;
+        let totalTimeSeconds = 0;
 
         for (let i = 1; i < session.length; i++) {
             const p1 = session[i - 1];
             const p2 = session[i];
             if(p1 && p2) {
-              totalDistance += haversineDistance(p1, p2); 
+              totalDistance += haversineDistance(p1, p2);
+              const timeDiff = (new Date(p2.created_at).getTime() - new Date(p1.created_at).getTime()) / 1000;
+              if (timeDiff > 0) {
+                  totalTimeSeconds += timeDiff;
+              }
             }
         }
         
@@ -351,5 +355,7 @@ export default function PlaygroundPage() {
             </main>
         </div>
     );
+
+    
 
     
