@@ -64,10 +64,16 @@ const SessionStats: FC<{ session: Session | null }> = ({ session }) => {
         for (let i = 1; i < session.length; i++) {
             const p1 = session[i - 1];
             const p2 = session[i];
-            totalDistance += haversineDistance(p1, p2); 
+            if(p1 && p2) {
+              totalDistance += haversineDistance(p1, p2); 
+            }
+        }
+        
+        if (totalTimeSeconds <= 0) {
+          return { distance: totalDistance / 1000, avgSpeed: 0 };
         }
 
-        const avgSpeedMs = totalTimeSeconds > 0 ? (totalDistance / totalTimeSeconds) : 0; // m/s
+        const avgSpeedMs = totalDistance / totalTimeSeconds; // m/s
         const avgSpeedKmh = avgSpeedMs * 3.6; // km/h
 
         return {
@@ -142,7 +148,9 @@ const MapComponent: FC<{ session: Session | null }> = ({ session }) => {
                 const newPolyline = L.polyline(latLngs, { color: 'blue' }).addTo(mapInstance.current!);
                 polylineRef.current = newPolyline;
                 
-                mapInstance.current.fitBounds(newPolyline.getBounds(), { padding: [50, 50] });
+                if (newPolyline.getBounds().isValid()) {
+                    mapInstance.current.fitBounds(newPolyline.getBounds(), { padding: [50, 50] });
+                }
             });
         }
      }, [session]);
@@ -244,10 +252,9 @@ export default function PlaygroundPage() {
         const durationSeconds = (end.getTime() - start.getTime()) / 1000;
         
         if (durationSeconds < 60) return `${Math.round(durationSeconds)} seconds`;
-        if (durationSeconds < 3600) return `${Math.round(durationSeconds / 60)} minutes`;
-
+        
         const duration = formatDistanceToNow(end, { compareDate: start });
-        return `${formatDistanceToNow(start, { addSuffix: true })} for ${duration}`;
+        return duration;
     }
 
     return (
@@ -291,7 +298,8 @@ export default function PlaygroundPage() {
                                                 <CardContent className="p-4">
                                                     <p className="font-semibold">Session {sessions.length - index}</p>
                                                     <div className="text-sm text-muted-foreground mt-2 space-y-1">
-                                                        <div className="flex items-center gap-2"><Clock className="h-3.5 w-3.5" /> <span>{getSessionDuration(session)}</span></div>
+                                                        <div className="flex items-center gap-2"><Clock className="h-3.5 w-3.5" /> <span>{formatDistanceToNow(new Date(session[0].created_at), {addSuffix: true})}</span></div>
+                                                        <div className="flex items-center gap-2"><MoveRight className="h-3.5 w-3.5" /> <span>Duration: {getSessionDuration(session)}</span></div>
                                                         <div className="flex items-center gap-2"><Hash className="h-3.5 w-3.5" /> <span>{session.length} data points</span></div>
                                                     </div>
                                                 </CardContent>
@@ -335,5 +343,4 @@ export default function PlaygroundPage() {
             </main>
         </div>
     );
-
     
