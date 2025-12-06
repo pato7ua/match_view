@@ -5,9 +5,8 @@ import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Loader2, MapPin } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
-import { AnimatePresence, motion } from 'framer-motion';
 import type { LatLngExpression } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -20,11 +19,12 @@ type LocationData = {
   lng: number;
 };
 
-// --- Dynamic Map Component ---
+// --- Dynamic Map Components ---
 const MapContainer = dynamic(() => import('react-leaflet').then(mod => mod.MapContainer), { ssr: false });
 const TileLayer = dynamic(() => import('react-leaflet').then(mod => mod.TileLayer), { ssr: false });
 const Marker = dynamic(() => import('react-leaflet').then(mod => mod.Marker), { ssr: false });
 const Popup = dynamic(() => import('react-leaflet').then(mod => mod.Popup), { ssr: false });
+
 
 const MapComponent: FC<{ points: LocationData[] }> = ({ points }) => {
     const center = useMemo(() => {
@@ -129,6 +129,12 @@ export default function PlaygroundPage() {
         fetchAndProcessData();
     }, []);
 
+    // This state ensures that the map component is only rendered on the client side.
+    const [isClient, setIsClient] = useState(false);
+    useEffect(() => {
+        setIsClient(true);
+    }, []);
+
     return (
         <div className="flex h-dvh w-full flex-col overflow-hidden bg-background">
             <header className="flex h-16 shrink-0 items-center justify-between border-b px-4 md:px-6">
@@ -173,21 +179,23 @@ export default function PlaygroundPage() {
 
                 <div className="md:col-span-2 bg-muted/20 border rounded-2xl shadow-inner p-4 relative overflow-hidden">
                     <div className="relative w-full h-full">
-                         {isLoading ? (
-                            <div className="absolute inset-0 flex items-center justify-center">
-                                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                            </div>
-                        ) : error ? (
-                             <div className="absolute inset-0 flex items-center justify-center">
-                                <p className="text-destructive text-center max-w-sm">{error}</p>
-                            </div>
-                        ) : debugPoints.length > 0 ? (
-                           <MapComponent points={debugPoints} />
-                        ) : (
-                             <div className="absolute inset-0 flex items-center justify-center">
-                                <p className="text-muted-foreground text-lg">No valid (non-zero) data points found.</p>
-                            </div>
-                        )}
+                         {isClient && (
+                            isLoading ? (
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                                </div>
+                            ) : error ? (
+                                 <div className="absolute inset-0 flex items-center justify-center">
+                                    <p className="text-destructive text-center max-w-sm">{error}</p>
+                                </div>
+                            ) : debugPoints.length > 0 ? (
+                               <MapComponent points={debugPoints} />
+                            ) : (
+                                 <div className="absolute inset-0 flex items-center justify-center">
+                                    <p className="text-muted-foreground text-lg">No valid (non-zero) data points found.</p>
+                                </div>
+                            )
+                         )}
                     </div>
                 </div>
             </main>
