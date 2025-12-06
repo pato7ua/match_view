@@ -71,7 +71,7 @@ const SessionStats: FC<{ session: Session | null }> = ({ session }) => {
             
             const timeDiffSeconds = (new Date(p2.created_at).getTime() - new Date(p1.created_at).getTime()) / 1000;
             if (timeDiffSeconds > 0) {
-                const speed = (distance * 3600) / timeDiffSeconds; // km/h
+                const speed = (distance / timeDiffSeconds) * 3600; // km/h
                 if (speed > maxSpeed) {
                     maxSpeed = speed;
                 }
@@ -342,3 +342,4 @@ export default function PlaygroundPage() {
     );
 }
 
+    
