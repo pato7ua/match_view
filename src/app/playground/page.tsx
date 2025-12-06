@@ -155,7 +155,7 @@ export default function PlaygroundPage() {
                 setIsLoading(true);
                 setError(null);
                 const { data, error } = await supabase
-                    .from('locations')
+                    .from('tracker_logs')
                     .select('*')
                     .order('created_at', { ascending: true });
 
@@ -204,9 +204,12 @@ export default function PlaygroundPage() {
                 }
                 
                 setSessions(detectedSessions.reverse()); // Show newest first
+                if (detectedSessions.length > 0) {
+                    setSelectedSession(detectedSessions[0]);
+                }
             } catch (err: any) {
                 if (err.message.includes("schema cache")) {
-                    setError("Database connection error. Please ensure the 'locations' table exists and Row Level Security is disabled or a policy is in place for read access.");
+                    setError("Database connection error. Please ensure the 'tracker_logs' table exists and Row Level Security is disabled or a policy is in place for read access.");
                 } else {
                     setError(err.message || 'Failed to fetch data.');
                 }
@@ -264,7 +267,7 @@ export default function PlaygroundPage() {
                             ) : error ? (
                                 <p className="text-sm text-destructive">{error}</p>
                             ) : sessions.length > 0 ? (
-                                <Select onValueChange={handleSessionChange} disabled={sessions.length === 0} defaultValue={sessions[0]?.startTime}>
+                                <Select onValueChange={handleSessionChange} disabled={sessions.length === 0} value={selectedSession?.startTime}>
                                     <SelectTrigger>
                                         <SelectValue placeholder="Choose a recorded session..." />
                                     </SelectTrigger>
