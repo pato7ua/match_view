@@ -1,8 +1,7 @@
-
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Loader2, Footprints, TrendingUp, Clock } from 'lucide-react';
@@ -27,11 +26,6 @@ type Session = {
   pointCount: number;
   points: LocationData[];
 };
-
-// --- Supabase Client ---
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // --- Helper Functions ---
 function haversineDistance(coords1: {lat: number, lng: number}, coords2: {lat: number, lng: number}): number {
@@ -169,20 +163,15 @@ export default function PlaygroundPage() {
                     return;
                 }
                 
-                // --- New Session detection logic ---
                 const detectedSessions: Session[] = [];
                 let currentSessionPoints: LocationData[] = [];
-                
-                for (let i = 0; i < data.length; i++) {
-                    const point = data[i];
+
+                for (const point of data) {
                     const isZeroPosition = point.lat === 0 && point.lng === 0;
 
                     if (!isZeroPosition) {
                         currentSessionPoints.push(point);
-                    }
-
-                    // End a session if we hit a zero, OR if it's the last point in the dataset
-                    if (isZeroPosition || i === data.length - 1) {
+                    } else {
                         if (currentSessionPoints.length > 1) {
                             detectedSessions.push({
                                 startTime: currentSessionPoints[0].created_at,
@@ -195,7 +184,17 @@ export default function PlaygroundPage() {
                     }
                 }
                 
-                setSessions(detectedSessions.reverse()); // Show newest first
+                // Add the last session if it exists and wasn't followed by a zero
+                if (currentSessionPoints.length > 1) {
+                     detectedSessions.push({
+                        startTime: currentSessionPoints[0].created_at,
+                        endTime: currentSessionPoints[currentSessionPoints.length - 1].created_at,
+                        pointCount: currentSessionPoints.length,
+                        points: currentSessionPoints,
+                    });
+                }
+                
+                setSessions(detectedSessions.reverse());
                 if (detectedSessions.length > 0) {
                     setSelectedSession(detectedSessions[0]);
                 } else {
@@ -329,5 +328,4 @@ export default function PlaygroundPage() {
             </main>
         </div>
     );
-
-    
+}
