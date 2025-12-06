@@ -80,24 +80,39 @@ export default function PlaygroundPage() {
             try {
                 setIsLoading(true);
                 setError(null);
-                const { data, error } = await supabase
-                    .from('tracker_logs')
-                    .select('*')
-                    .limit(3000) // Fetch up to 3000 records to override the default 1000 limit
-                    .order('created_at', { ascending: true });
-
-                if (error) throw error;
                 
-                if (!data) {
-                    setAllPoints([]);
-                    setIsLoading(false);
-                    return;
+                let allData: LocationData[] = [];
+                let page = 0;
+                const pageSize = 1000;
+                let moreData = true;
+
+                while(moreData) {
+                    const from = page * pageSize;
+                    const to = from + pageSize - 1;
+
+                    const { data, error } = await supabase
+                        .from('tracker_logs')
+                        .select('*')
+                        .order('created_at', { ascending: true })
+                        .range(from, to);
+
+                    if (error) throw error;
+                    
+                    if (data) {
+                        allData = allData.concat(data);
+                    }
+
+                    if (!data || data.length < pageSize) {
+                        moreData = false;
+                    } else {
+                        page++;
+                    }
                 }
                 
-                setAllPoints(data);
+                setAllPoints(allData);
 
                 // For debugging: select 10 random non-zero points
-                const validPoints = data.filter(p => p.lat !== 0 && p.lng !== 0);
+                const validPoints = allData.filter(p => p.lat !== 0 && p.lng !== 0);
                 const shuffled = validPoints.sort(() => 0.5 - Math.random());
                 setDebugPoints(shuffled.slice(0, 10));
 
