@@ -6,9 +6,9 @@ import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Loader2, MapPin, Clock, Hash } from 'lucide-react';
+import { ArrowLeft, Loader2, MapPin, Clock, Hash, MoveRight, Gauge, Waypoints } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
-import type { LatLngExpression, Map as LeafletMap, Polyline as LeafletPolyline, Icon } from 'leaflet';
+import type { LatLngExpression, Map as LeafletMap, Polyline as LeafletPolyline } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { formatDistanceToNow } from 'date-fns';
@@ -17,7 +17,6 @@ import { formatDistanceToNow } from 'date-fns';
 const MapContainer = dynamic(() => import('react-leaflet').then(mod => mod.MapContainer), { ssr: false });
 const TileLayer = dynamic(() => import('react-leaflet').then(mod => mod.TileLayer), { ssr: false });
 const Marker = dynamic(() => import('react-leaflet').then(mod => mod.Marker), { ssr: false });
-const Popup = dynamic(() => import('react-leaflet').then(mod => mod.Popup), { ssr: false });
 const Polyline = dynamic(() => import('react-leaflet').then(mod => mod.Polyline), { ssr: false });
 
 
@@ -33,7 +32,90 @@ type Session = LocationData[];
 
 const SESSION_GAP_THRESHOLD = 60 * 60 * 1000; // 1 hour in milliseconds
 
-// --- Map Component ---
+// --- Utility Functions ---
+function haversineDistance(coords1: { lat: number; lng: number }, coords2: { lat: number; lng: number }): number {
+    const toRad = (x: number) => (x * Math.PI) / 180;
+    const R = 6371; // Earth radius in km
+
+    const dLat = toRad(coords2.lat - coords1.lat);
+    const dLon = toRad(coords2.lng - coords1.lng);
+    const lat1 = toRad(coords1.lat);
+    const lat2 = toRad(coords2.lat);
+
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c; // Distance in km
+}
+
+
+// --- Components ---
+
+const SessionStats: FC<{ session: Session | null }> = ({ session }) => {
+    const stats = useMemo(() => {
+        if (!session || session.length < 2) {
+            return { distance: 0, avgSpeed: 0, maxSpeed: 0 };
+        }
+
+        let totalDistance = 0;
+        let maxSpeed = 0;
+        const totalTimeSeconds = (new Date(session[session.length - 1].created_at).getTime() - new Date(session[0].created_at).getTime()) / 1000;
+
+        for (let i = 1; i < session.length; i++) {
+            const p1 = session[i - 1];
+            const p2 = session[i];
+            const distance = haversineDistance(p1, p2); // km
+            totalDistance += distance;
+            
+            const timeDiffSeconds = (new Date(p2.created_at).getTime() - new Date(p1.created_at).getTime()) / 1000;
+            if (timeDiffSeconds > 0) {
+                const speed = (distance * 3600) / timeDiffSeconds; // km/h
+                if (speed > maxSpeed) {
+                    maxSpeed = speed;
+                }
+            }
+        }
+
+        const avgSpeed = totalTimeSeconds > 0 ? (totalDistance / totalTimeSeconds) * 3600 : 0; // km/h
+
+        return {
+            distance: totalDistance,
+            avgSpeed: avgSpeed,
+            maxSpeed: maxSpeed,
+        };
+    }, [session]);
+    
+    if (!session) return null;
+
+    return (
+        <Card className="flex flex-col">
+            <CardHeader>
+                <CardTitle>Session Stats</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-3 gap-4 text-center">
+                 <div className="flex flex-col items-center gap-1">
+                    <Waypoints className="h-6 w-6 text-primary" />
+                    <p className="text-2xl font-bold">{stats.distance.toFixed(2)}</p>
+                    <p className="text-xs text-muted-foreground">km</p>
+                </div>
+                 <div className="flex flex-col items-center gap-1">
+                    <MoveRight className="h-6 w-6 text-primary" />
+                    <p className="text-2xl font-bold">{stats.avgSpeed.toFixed(1)}</p>
+                    <p className="text-xs text-muted-foreground">km/h (avg)</p>
+                </div>
+                <div className="flex flex-col items-center gap-1">
+                    <Gauge className="h-6 w-6 text-primary" />
+                    <p className="text-2xl font-bold">{stats.maxSpeed.toFixed(1)}</p>
+                    <p className="text-xs text-muted-foreground">km/h (max)</p>
+                </div>
+            </CardContent>
+        </Card>
+    );
+};
+
+
 const MapComponent: FC<{ session: Session | null }> = ({ session }) => {
     const mapRef = useRef<HTMLDivElement>(null);
     const mapInstance = useRef<LeafletMap | null>(null);
@@ -169,7 +251,8 @@ export default function PlaygroundPage() {
         if (session.length < 2) return "0 minutes";
         const start = new Date(session[0].created_at);
         const end = new Date(session[session.length - 1].created_at);
-        return formatDistanceToNow(start, { addSuffix: false, includeSeconds: true }) + ` ago for ${formatDistanceToNow(end, { compareDate: start })}`;
+        const duration = formatDistanceToNow(end, { compareDate: start });
+        return `${formatDistanceToNow(start, { addSuffix: true })} for ${duration}`;
     }
 
     return (
@@ -189,14 +272,14 @@ export default function PlaygroundPage() {
             </header>
             <main className="flex-1 grid md:grid-cols-3 gap-6 p-6 overflow-hidden">
                 <div className="md:col-span-1 flex flex-col gap-6">
-                     <Card className="flex flex-col">
+                     <Card className="flex-shrink-0">
                         <CardHeader>
                             <CardTitle>Tracking Sessions</CardTitle>
                             <CardDescription>
                                 {isLoading ? "Loading sessions..." : `Found ${sessions.length} distinct sessions.`}
                             </CardDescription>
                         </CardHeader>
-                        <CardContent className="flex-1 overflow-hidden">
+                        <CardContent className="flex-1 overflow-hidden max-h-[40vh]">
                             <ScrollArea className="h-full">
                                 <div className="space-y-4 pr-6">
                                 {isLoading ? (
@@ -226,6 +309,7 @@ export default function PlaygroundPage() {
                             </ScrollArea>
                         </CardContent>
                     </Card>
+                    <SessionStats session={selectedSession} />
                 </div>
 
                 <div className="md:col-span-2 bg-muted/20 border rounded-2xl shadow-inner p-4 relative overflow-hidden">
