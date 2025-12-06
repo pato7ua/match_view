@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
-import type { LatLngExpression } from 'leaflet';
+import type { LatLngExpression, Icon } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
 // --- Types ---
@@ -21,22 +21,18 @@ type LocationData = {
 };
 
 // --- Dynamic Map Components ---
+// Dynamically import map components to ensure they only run on the client side.
 const MapContainer = dynamic(() => import('react-leaflet').then(mod => mod.MapContainer), { ssr: false });
 const TileLayer = dynamic(() => import('react-leaflet').then(mod => mod.TileLayer), { ssr: false });
 const Marker = dynamic(() => import('react-leaflet').then(mod => mod.Marker), { ssr: false });
 const Popup = dynamic(() => import('react-leaflet').then(mod => mod.Popup), { ssr: false });
 
-
 const MapComponent: FC<{ points: LocationData[] }> = ({ points }) => {
-    const center = useMemo(() => {
-        if (points.length === 0) return [51.505, -0.09] as LatLngExpression;
-        const avgLat = points.reduce((acc, p) => acc + p.lat, 0) / points.length;
-        const avgLng = points.reduce((acc, p) => acc + p.lng, 0) / points.length;
-        return [avgLat, avgLng] as LatLngExpression;
-    }, [points]);
-    
-    // Using a dynamic import for the icon to avoid SSR issues with Leaflet
-    const [icon, setIcon] = useState<L.Icon>();
+    // This state will hold the leaflet icon once it's loaded on the client
+    const [icon, setIcon] = useState<Icon | null>(null);
+
+    // This useEffect runs once on the client to load the leaflet icon.
+    // This prevents server/client mismatches.
     useEffect(() => {
         import('leaflet').then(L => {
             setIcon(new L.Icon({
@@ -51,6 +47,14 @@ const MapComponent: FC<{ points: LocationData[] }> = ({ points }) => {
         });
     }, []);
 
+    const center = useMemo(() => {
+        if (points.length === 0) return [51.505, -0.09] as LatLngExpression;
+        const avgLat = points.reduce((acc, p) => acc + p.lat, 0) / points.length;
+        const avgLng = points.reduce((acc, p) => acc + p.lng, 0) / points.length;
+        return [avgLat, avgLng] as LatLngExpression;
+    }, [points]);
+    
+    // If the icon isn't loaded yet, show a loader to prevent errors.
     if (!icon) {
         return <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin" /></div>;
     }
@@ -131,7 +135,7 @@ export default function PlaygroundPage() {
         setIsClient(true);
 
         if (allPoints.length > 0) {
-            // For debugging: select 10 random non-zero points only on client
+            // Select random non-zero points only on client to prevent hydration errors.
             const validPoints = allPoints.filter(p => p.lat !== 0 && p.lng !== 0);
             const shuffled = validPoints.sort(() => 0.5 - Math.random());
             setDebugPoints(shuffled.slice(0, 10));
@@ -183,7 +187,7 @@ export default function PlaygroundPage() {
 
                 <div className="md:col-span-2 bg-muted/20 border rounded-2xl shadow-inner p-4 relative overflow-hidden">
                     <div className="relative w-full h-full">
-                         {isClient && (
+                         {isClient ? ( // Only render the map on the client
                             isLoading ? (
                                 <div className="absolute inset-0 flex items-center justify-center">
                                     <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -199,6 +203,10 @@ export default function PlaygroundPage() {
                                     <p className="text-muted-foreground text-lg">No valid (non-zero) data points found.</p>
                                 </div>
                             )
+                         ) : ( // On the server, render a placeholder
+                            <div className="flex items-center justify-center h-full">
+                                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                            </div>
                          )}
                     </div>
                 </div>
@@ -207,4 +215,4 @@ export default function PlaygroundPage() {
     );
 }
 
-  
+    
