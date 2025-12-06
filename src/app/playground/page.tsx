@@ -19,29 +19,11 @@ type LocationData = {
   lng: number;
 };
 
-// --- Dynamic Map Components ---
-const MapContainer = dynamic(() => import('react-leaflet').then(mod => mod.MapContainer), { ssr: false });
-const TileLayer = dynamic(() => import('react-leaflet').then(mod => mod.TileLayer), { ssr: false });
-const Marker = dynamic(() => import('react-leaflet').then(mod => mod.Marker), { ssr: false });
-const Popup = dynamic(() => import('react-leaflet').then(mod => mod.Popup), { ssr: false });
+// --- We don't use react-leaflet components anymore to prevent re-initialization ---
 
 const MapComponent: FC<{ points: LocationData[] }> = ({ points }) => {
-    const mapRef = useRef<LeafletMap | null>(null);
-    const [icon, setIcon] = useState<Icon | null>(null);
-
-    useEffect(() => {
-        import('leaflet').then(L => {
-            setIcon(new L.Icon({
-                iconUrl: '/assets/marker-icon.png',
-                iconRetinaUrl: '/assets/marker-icon-2x.png',
-                shadowUrl: '/assets/marker-shadow.png',
-                iconSize: [25, 41],
-                iconAnchor: [12, 41],
-                popupAnchor: [1, -34],
-                shadowSize: [41, 41]
-            }));
-        });
-    }, []);
+    const mapRef = useRef<HTMLDivElement>(null);
+    const mapInstance = useRef<LeafletMap | null>(null);
 
     const center = useMemo(() => {
         if (points.length === 0) return [51.505, -0.09] as LatLngExpression;
@@ -50,37 +32,47 @@ const MapComponent: FC<{ points: LocationData[] }> = ({ points }) => {
         return [avgLat, avgLng] as LatLngExpression;
     }, [points]);
     
-    if (!icon) {
-        return <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin" /></div>;
-    }
+    useEffect(() => {
+        if (mapRef.current && !mapInstance.current) {
+            import('leaflet').then(L => {
+                const map = L.map(mapRef.current!).setView(center, 13);
+                mapInstance.current = map;
 
-    return (
-        <MapContainer
-            center={center}
-            zoom={13}
-            scrollWheelZoom={false}
-            className="h-full w-full rounded-2xl"
-            whenCreated={mapInstance => { mapRef.current = mapInstance }}
-        >
-            {mapRef.current && (
-                <>
-                    <TileLayer
-                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    />
-                    {points.map((point) => (
-                        <Marker key={point.id} position={[point.lat, point.lng]} icon={icon}>
-                            <Popup>
-                                Lat: {point.lat}, Lng: {point.lng} <br />
-                                Time: {new Date(point.created_at).toLocaleString()}
-                            </Popup>
-                        </Marker>
-                    ))}
-                </>
-            )}
-        </MapContainer>
-    );
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                }).addTo(map);
+
+                const icon = new L.Icon({
+                    iconUrl: '/assets/marker-icon.png',
+                    iconRetinaUrl: '/assets/marker-icon-2x.png',
+                    shadowUrl: '/assets/marker-shadow.png',
+                    iconSize: [25, 41],
+                    iconAnchor: [12, 41],
+                    popupAnchor: [1, -34],
+                    shadowSize: [41, 41]
+                });
+
+                points.forEach(point => {
+                    L.marker([point.lat, point.lng], { icon: icon })
+                        .addTo(map)
+                        .bindPopup(`Lat: ${point.lat}, Lng: ${point.lng} <br /> Time: ${new Date(point.created_at).toLocaleString()}`);
+                });
+            });
+        }
+        
+        // Cleanup function to destroy the map instance
+        return () => {
+            if (mapInstance.current) {
+                mapInstance.current.remove();
+                mapInstance.current = null;
+            }
+        };
+
+    }, [points, center]); // Re-run if points or center change, the cleanup will handle the old map.
+
+    return <div ref={mapRef} className="h-full w-full rounded-2xl" />;
 };
+
 
 export default function PlaygroundPage() {
     const [allPoints, setAllPoints] = useState<LocationData[]>([]);
