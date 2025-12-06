@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo, FC } from 'react';
@@ -114,11 +115,6 @@ export default function PlaygroundPage() {
                 
                 setAllPoints(allData);
 
-                // For debugging: select 10 random non-zero points
-                const validPoints = allData.filter(p => p.lat !== 0 && p.lng !== 0);
-                const shuffled = validPoints.sort(() => 0.5 - Math.random());
-                setDebugPoints(shuffled.slice(0, 10));
-
             } catch (err: any) {
                 setError(err.message || 'Failed to fetch data.');
             } finally {
@@ -133,7 +129,15 @@ export default function PlaygroundPage() {
     const [isClient, setIsClient] = useState(false);
     useEffect(() => {
         setIsClient(true);
-    }, []);
+
+        if (allPoints.length > 0) {
+            // For debugging: select 10 random non-zero points only on client
+            const validPoints = allPoints.filter(p => p.lat !== 0 && p.lng !== 0);
+            const shuffled = validPoints.sort(() => 0.5 - Math.random());
+            setDebugPoints(shuffled.slice(0, 10));
+        }
+
+    }, [allPoints]);
 
     return (
         <div className="flex h-dvh w-full flex-col overflow-hidden bg-background">
@@ -202,3 +206,5 @@ export default function PlaygroundPage() {
         </div>
     );
 }
+
+  
