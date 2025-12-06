@@ -11,7 +11,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/com
 import type { LatLngExpression, Map as LeafletMap, Polyline as LeafletPolyline } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceStrict } from 'date-fns';
 
 // --- Dynamic Imports for Leaflet components ---
 const MapContainer = dynamic(() => import('react-leaflet').then(mod => mod.MapContainer), { ssr: false });
@@ -29,7 +29,7 @@ type LocationData = {
 
 type Session = LocationData[];
 
-const SESSION_GAP_THRESHOLD = 60 * 60 * 1000; // 1 hour in milliseconds
+const SESSION_GAP_THRESHOLD = 5 * 60 * 1000; // 5 minutes in milliseconds
 
 // --- Utility Functions ---
 function haversineDistance(coords1: { lat: number; lng: number }, coords2: { lat: number; lng: number }): number {
@@ -139,7 +139,6 @@ const MapComponent: FC<{ session: Session | null }> = ({ session }) => {
      useEffect(() => {
         if (mapInstance.current && session && session.length > 0) {
             import('leaflet').then(L => {
-                // Clear previous polyline if it exists
                 if (polylineRef.current) {
                     polylineRef.current.remove();
                 }
@@ -152,6 +151,8 @@ const MapComponent: FC<{ session: Session | null }> = ({ session }) => {
                     mapInstance.current.fitBounds(newPolyline.getBounds(), { padding: [50, 50] });
                 }
             });
+        } else if (mapInstance.current && !session && polylineRef.current) {
+            polylineRef.current.remove();
         }
      }, [session]);
 
@@ -208,6 +209,7 @@ export default function PlaygroundPage() {
                     for (let i = 1; i < allData.length; i++) {
                         const prevPoint = allData[i - 1];
                         const currentPoint = allData[i];
+                        if (!currentPoint || !prevPoint) continue;
                         const timeDiff = new Date(currentPoint.created_at).getTime() - new Date(prevPoint.created_at).getTime();
 
                         if (timeDiff > SESSION_GAP_THRESHOLD) {
@@ -249,12 +251,15 @@ export default function PlaygroundPage() {
         if (session.length < 2) return "0 minutes";
         const start = new Date(session[0].created_at);
         const end = new Date(session[session.length - 1].created_at);
-        const durationSeconds = (end.getTime() - start.getTime()) / 1000;
-        
-        if (durationSeconds < 60) return `${Math.round(durationSeconds)} seconds`;
-        
-        const duration = formatDistanceToNow(end, { compareDate: start });
-        return duration;
+        return formatDistanceStrict(end, start, { roundingMethod: 'round' });
+    }
+
+    const getSessionStartTime = (session: Session) => {
+         if (session.length === 0) return "";
+         return new Date(session[0].created_at).toLocaleString([], {
+             dateStyle: 'medium',
+             timeStyle: 'short'
+         });
     }
 
     return (
@@ -294,11 +299,11 @@ export default function PlaygroundPage() {
                                 ) : sessions.length > 0 ? (
                                     sessions.map((session, index) => (
                                         <button key={index} onClick={() => setSelectedSession(session)} className="w-full text-left">
-                                            <Card className={`transition-all hover:border-primary ${selectedSession && selectedSession[0].id === session[0].id ? 'border-primary bg-primary/10' : ''}`}>
+                                            <Card className={`transition-all hover:border-primary ${selectedSession && session.length > 0 && selectedSession[0].id === session[0].id ? 'border-primary bg-primary/10' : ''}`}>
                                                 <CardContent className="p-4">
                                                     <p className="font-semibold">Session {sessions.length - index}</p>
                                                     <div className="text-sm text-muted-foreground mt-2 space-y-1">
-                                                        <div className="flex items-center gap-2"><Clock className="h-3.5 w-3.5" /> <span>{formatDistanceToNow(new Date(session[0].created_at), {addSuffix: true})}</span></div>
+                                                        <div className="flex items-center gap-2"><Clock className="h-3.5 w-3.5" /> <span>{getSessionStartTime(session)}</span></div>
                                                         <div className="flex items-center gap-2"><MoveRight className="h-3.5 w-3.5" /> <span>Duration: {getSessionDuration(session)}</span></div>
                                                         <div className="flex items-center gap-2"><Hash className="h-3.5 w-3.5" /> <span>{session.length} data points</span></div>
                                                     </div>
@@ -344,3 +349,4 @@ export default function PlaygroundPage() {
         </div>
     );
     
+
