@@ -29,21 +29,17 @@ type LocationData = {
 
 type Session = LocationData[];
 
-type SessionStats = {
-    distance: number; // in km
-    avgSpeed: number; // in km/h
-    durationSeconds: number;
-    pointCount: number;
-    startTime: string;
-}
-
 type SessionWithStats = {
     points: Session;
-    stats: SessionStats;
+    stats: {
+        distance: number; // in km
+        durationSeconds: number;
+        pointCount: number;
+        startTime: string;
+    }
 }
 
-const SESSION_GAP_THRESHOLD_SECONDS = 5 * 60; // 5 minutes in seconds
-const POSITION_CHANGE_THRESHOLD_METERS = 10; // GPS jitter threshold
+const SESSION_GAP_THRESHOLD_SECONDS = 5 * 60; // 5 minutes
 
 // --- Utility Functions ---
 function haversineDistance(coords1: { lat: number; lng: number }, coords2: { lat: number; lng: number }): number {
@@ -66,8 +62,10 @@ function haversineDistance(coords1: { lat: number; lng: number }, coords2: { lat
 
 // --- Components ---
 
-const SessionStatsDisplay: FC<{ stats: SessionStats | null }> = ({ stats }) => {
-    if (!stats) return null;
+const SessionStatsDisplay: FC<{ session: SessionWithStats | null }> = ({ session }) => {
+    if (!session) return null;
+    const { distance, durationSeconds } = session.stats;
+    const avgSpeedKmh = durationSeconds > 0 ? (distance / (durationSeconds / 3600)) : 0;
 
     return (
         <Card className="flex flex-col">
@@ -77,12 +75,12 @@ const SessionStatsDisplay: FC<{ stats: SessionStats | null }> = ({ stats }) => {
             <CardContent className="grid grid-cols-2 gap-4 text-center">
                  <div className="flex flex-col items-center gap-1">
                     <Waypoints className="h-6 w-6 text-primary" />
-                    <p className="text-2xl font-bold">{stats.distance.toFixed(2)}</p>
+                    <p className="text-2xl font-bold">{distance.toFixed(2)}</p>
                     <p className="text-xs text-muted-foreground">Total Distance (km)</p>
                 </div>
                  <div className="flex flex-col items-center gap-1">
                     <Gauge className="h-6 w-6 text-primary" />
-                    <p className="text-2xl font-bold">{stats.avgSpeed.toFixed(1)}</p>
+                    <p className="text-2xl font-bold">{avgSpeedKmh.toFixed(1)}</p>
                     <p className="text-xs text-muted-foreground">Avg Speed (km/h)</p>
                 </div>
             </CardContent>
@@ -115,13 +113,13 @@ const MapComponent: FC<{ session: Session | null }> = ({ session }) => {
     }, []);
 
      useEffect(() => {
-        if (mapInstance.current && session && session.length > 0) {
+        if (mapInstance.current && session && session.points.length > 0) {
             import('leaflet').then(L => {
                 if (polylineRef.current) {
                     polylineRef.current.remove();
                 }
 
-                const latLngs = session.map(p => [p.lat, p.lng] as [number, number]);
+                const latLngs = session.points.map(p => [p.lat, p.lng] as [number, number]);
                 const newPolyline = L.polyline(latLngs, { color: 'blue' }).addTo(mapInstance.current!);
                 polylineRef.current = newPolyline;
                 
@@ -190,9 +188,8 @@ export default function PlaygroundPage() {
                         if (!currentPoint || !prevPoint) continue;
                         
                         const timeDiffSeconds = (new Date(currentPoint.created_at).getTime() - new Date(prevPoint.created_at).getTime()) / 1000;
-                        const posDiffMeters = haversineDistance(prevPoint, currentPoint);
 
-                        if (timeDiffSeconds > SESSION_GAP_THRESHOLD_SECONDS && posDiffMeters < POSITION_CHANGE_THRESHOLD_METERS) {
+                        if (timeDiffSeconds > SESSION_GAP_THRESHOLD_SECONDS) {
                             if (currentSession.length > 1) {
                                 identifiedSessions.push(currentSession);
                             }
@@ -220,13 +217,10 @@ export default function PlaygroundPage() {
                             }
                         }
                         
-                        const avgSpeedKmh = totalTimeSeconds > 0 ? (totalDistanceMeters / totalTimeSeconds) * 3.6 : 0;
-
                         return {
                             points: session,
                             stats: {
                                 distance: totalDistanceMeters / 1000,
-                                avgSpeed: avgSpeedKmh,
                                 durationSeconds: totalTimeSeconds,
                                 pointCount: session.length,
                                 startTime: session[0] ? new Date(session[0].created_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : ''
@@ -257,6 +251,7 @@ export default function PlaygroundPage() {
     
     const getSessionDuration = (session: SessionWithStats) => {
         const { durationSeconds } = session.stats;
+        if (durationSeconds < 1) return "0 seconds";
         const start = new Date();
         const end = new Date(start.getTime() + durationSeconds * 1000);
         return formatDistanceStrict(end, start, { roundingMethod: 'round' });
@@ -286,7 +281,7 @@ export default function PlaygroundPage() {
                                 {isLoading ? "Loading sessions..." : `Found ${sessions.length} distinct sessions.`}
                             </CardDescription>
                         </CardHeader>
-                        <CardContent className="flex-1 overflow-y-auto">
+                        <CardContent className="flex-1 overflow-hidden">
                             <ScrollArea className="h-full pr-6">
                                 <div className="space-y-4">
                                 {isLoading ? (
@@ -317,7 +312,7 @@ export default function PlaygroundPage() {
                             </ScrollArea>
                         </CardContent>
                     </Card>
-                    {selectedSession && <SessionStatsDisplay stats={selectedSession.stats} />}
+                    {selectedSession && <SessionStatsDisplay session={selectedSession} />}
                 </div>
 
                 <div className="md:col-span-2 bg-muted/20 border rounded-2xl shadow-inner p-4 relative overflow-hidden">
@@ -332,7 +327,7 @@ export default function PlaygroundPage() {
                                     <p className="text-destructive text-center max-w-sm">{error}</p>
                                 </div>
                             ) : selectedSession ? (
-                               <MapComponent session={selectedSession.points} />
+                               <MapComponent session={selectedSession} />
                             ) : (
                                  <div className="absolute inset-0 flex items-center justify-center">
                                     <p className="text-muted-foreground text-lg">Select a session to view its route.</p>
