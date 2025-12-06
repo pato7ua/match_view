@@ -6,10 +6,20 @@ import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2, MapPin, Clock, Hash } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
-import type { LatLngExpression, Icon, Map as LeafletMap } from 'leaflet';
+import type { LatLngExpression, Map as LeafletMap, Polyline as LeafletPolyline, Icon } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { formatDistanceToNow } from 'date-fns';
+
+// --- Dynamic Imports for Leaflet components ---
+const MapContainer = dynamic(() => import('react-leaflet').then(mod => mod.MapContainer), { ssr: false });
+const TileLayer = dynamic(() => import('react-leaflet').then(mod => mod.TileLayer), { ssr: false });
+const Marker = dynamic(() => import('react-leaflet').then(mod => mod.Marker), { ssr: false });
+const Popup = dynamic(() => import('react-leaflet').then(mod => mod.Popup), { ssr: false });
+const Polyline = dynamic(() => import('react-leaflet').then(mod => mod.Polyline), { ssr: false });
+
 
 // --- Types ---
 type LocationData = {
@@ -19,67 +29,69 @@ type LocationData = {
   lng: number;
 };
 
-// --- We don't use react-leaflet components anymore to prevent re-initialization ---
+type Session = LocationData[];
 
-const MapComponent: FC<{ points: LocationData[] }> = ({ points }) => {
+const SESSION_GAP_THRESHOLD = 60 * 60 * 1000; // 1 hour in milliseconds
+
+// --- Map Component ---
+const MapComponent: FC<{ session: Session | null }> = ({ session }) => {
     const mapRef = useRef<HTMLDivElement>(null);
     const mapInstance = useRef<LeafletMap | null>(null);
+    const polylineRef = useRef<LeafletPolyline | null>(null);
 
-    const center = useMemo(() => {
-        if (points.length === 0) return [51.505, -0.09] as LatLngExpression;
-        const avgLat = points.reduce((acc, p) => acc + p.lat, 0) / points.length;
-        const avgLng = points.reduce((acc, p) => acc + p.lng, 0) / points.length;
-        return [avgLat, avgLng] as LatLngExpression;
-    }, [points]);
+    const center: LatLngExpression = useMemo(() => {
+        if (!session || session.length === 0) return [51.505, -0.09];
+        const avgLat = session.reduce((acc, p) => acc + p.lat, 0) / session.length;
+        const avgLng = session.reduce((acc, p) => acc + p.lng, 0) / session.length;
+        return [avgLat, avgLng];
+    }, [session]);
     
     useEffect(() => {
         if (mapRef.current && !mapInstance.current) {
-            import('leaflet').then(L => {
-                const map = L.map(mapRef.current!).setView(center, 13);
-                mapInstance.current = map;
-
+             import('leaflet').then(L => {
+                mapInstance.current = L.map(mapRef.current!).setView(center, 13);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                }).addTo(map);
-
-                const icon = new L.Icon({
-                    iconUrl: '/assets/marker-icon.png',
-                    iconRetinaUrl: '/assets/marker-icon-2x.png',
-                    shadowUrl: '/assets/marker-shadow.png',
-                    iconSize: [25, 41],
-                    iconAnchor: [12, 41],
-                    popupAnchor: [1, -34],
-                    shadowSize: [41, 41]
-                });
-
-                points.forEach(point => {
-                    L.marker([point.lat, point.lng], { icon: icon })
-                        .addTo(map)
-                        .bindPopup(`Lat: ${point.lat}, Lng: ${point.lng} <br /> Time: ${new Date(point.created_at).toLocaleString()}`);
-                });
+                }).addTo(mapInstance.current);
             });
         }
         
-        // Cleanup function to destroy the map instance
         return () => {
             if (mapInstance.current) {
                 mapInstance.current.remove();
                 mapInstance.current = null;
             }
         };
+    }, []);
 
-    }, [points, center]); // Re-run if points or center change, the cleanup will handle the old map.
+     useEffect(() => {
+        if (mapInstance.current && session && session.length > 0) {
+            import('leaflet').then(L => {
+                // Clear previous polyline if it exists
+                if (polylineRef.current) {
+                    polylineRef.current.remove();
+                }
+
+                const latLngs = session.map(p => [p.lat, p.lng] as [number, number]);
+                const newPolyline = L.polyline(latLngs, { color: 'blue' }).addTo(mapInstance.current!);
+                polylineRef.current = newPolyline;
+                
+                mapInstance.current.fitBounds(newPolyline.getBounds(), { padding: [50, 50] });
+            });
+        }
+     }, [session]);
+
 
     return <div ref={mapRef} className="h-full w-full rounded-2xl" />;
 };
 
 
 export default function PlaygroundPage() {
-    const [allPoints, setAllPoints] = useState<LocationData[]>([]);
-    const [debugPoints, setDebugPoints] = useState<LocationData[]>([]);
+    const [sessions, setSessions] = useState<Session[]>([]);
+    const [selectedSession, setSelectedSession] = useState<Session | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-
+    
     useEffect(() => {
         const fetchAndProcessData = async () => {
             try {
@@ -104,7 +116,8 @@ export default function PlaygroundPage() {
                     if (error) throw error;
                     
                     if (data) {
-                        allData = allData.concat(data);
+                       const validPoints = data.filter(p => p.lat !== 0 && p.lng !== 0);
+                       allData = allData.concat(validPoints);
                     }
 
                     if (!data || data.length < pageSize) {
@@ -114,7 +127,28 @@ export default function PlaygroundPage() {
                     }
                 }
                 
-                setAllPoints(allData);
+                if (allData.length > 0) {
+                    const identifiedSessions: Session[] = [];
+                    let currentSession: Session = [allData[0]];
+
+                    for (let i = 1; i < allData.length; i++) {
+                        const prevPoint = allData[i - 1];
+                        const currentPoint = allData[i];
+                        const timeDiff = new Date(currentPoint.created_at).getTime() - new Date(prevPoint.created_at).getTime();
+
+                        if (timeDiff > SESSION_GAP_THRESHOLD) {
+                            identifiedSessions.push(currentSession);
+                            currentSession = [];
+                        }
+                        currentSession.push(currentPoint);
+                    }
+                    identifiedSessions.push(currentSession);
+                    setSessions(identifiedSessions.reverse()); // Show newest first
+                    if (identifiedSessions.length > 0) {
+                        setSelectedSession(identifiedSessions[0]);
+                    }
+                }
+
 
             } catch (err: any) {
                 setError(err.message || 'Failed to fetch data.');
@@ -130,14 +164,13 @@ export default function PlaygroundPage() {
     useEffect(() => {
         setIsClient(true);
     }, []);
-
-    useEffect(() => {
-        if (allPoints.length > 0 && isClient) {
-            const validPoints = allPoints.filter(p => p.lat !== 0 && p.lng !== 0);
-            const shuffled = [...validPoints].sort(() => 0.5 - Math.random());
-            setDebugPoints(shuffled.slice(0, 10));
-        }
-    }, [allPoints, isClient]);
+    
+    const getSessionDuration = (session: Session) => {
+        if (session.length < 2) return "0 minutes";
+        const start = new Date(session[0].created_at);
+        const end = new Date(session[session.length - 1].created_at);
+        return formatDistanceToNow(start, { addSuffix: false, includeSeconds: true }) + ` ago for ${formatDistanceToNow(end, { compareDate: start })}`;
+    }
 
     return (
         <div className="flex h-dvh w-full flex-col overflow-hidden bg-background">
@@ -150,33 +183,47 @@ export default function PlaygroundPage() {
                         </Link>
                     </Button>
                     <h1 className="text-lg font-semibold sm:text-xl md:text-2xl tracking-tight">
-                        Tracker Playground (Debug Mode)
+                        Tracker Playground
                     </h1>
                 </div>
             </header>
             <main className="flex-1 grid md:grid-cols-3 gap-6 p-6 overflow-hidden">
                 <div className="md:col-span-1 flex flex-col gap-6">
-                     <Card>
+                     <Card className="flex flex-col">
                         <CardHeader>
-                            <CardTitle>Data Access Debug</CardTitle>
-                            <CardDescription>Checking if data from 'tracker_logs' is being fetched.</CardDescription>
+                            <CardTitle>Tracking Sessions</CardTitle>
+                            <CardDescription>
+                                {isLoading ? "Loading sessions..." : `Found ${sessions.length} distinct sessions.`}
+                            </CardDescription>
                         </CardHeader>
-                        <CardContent>
-                            {isLoading ? (
-                                <div className="flex items-center gap-2 text-muted-foreground">
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                    <span>Fetching data...</span>
+                        <CardContent className="flex-1 overflow-hidden">
+                            <ScrollArea className="h-full">
+                                <div className="space-y-4 pr-6">
+                                {isLoading ? (
+                                    <div className="flex items-center gap-2 text-muted-foreground">
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        <span>Fetching data...</span>
+                                    </div>
+                                ) : error ? (
+                                    <p className="text-sm text-destructive">{error}</p>
+                                ) : sessions.length > 0 ? (
+                                    sessions.map((session, index) => (
+                                        <button key={index} onClick={() => setSelectedSession(session)} className="w-full text-left">
+                                            <Card className={`transition-all hover:border-primary ${selectedSession && selectedSession[0].id === session[0].id ? 'border-primary bg-primary/10' : ''}`}>
+                                                <CardContent className="p-4">
+                                                    <p className="font-semibold">Session {sessions.length - index}</p>
+                                                    <div className="text-sm text-muted-foreground mt-2 space-y-1">
+                                                        <div className="flex items-center gap-2"><Clock className="h-3.5 w-3.5" /> <span>{getSessionDuration(session)}</span></div>
+                                                        <div className="flex items-center gap-2"><Hash className="h-3.5 w-3.5" /> <span>{session.length} data points</span></div>
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
+                                        </button>
+                                    ))
+                                ) : <p className="text-muted-foreground">No sessions found.</p>
+                            }
                                 </div>
-                            ) : error ? (
-                                <p className="text-sm text-destructive">{error}</p>
-                            ) : (
-                                <div>
-                                    <p className="text-2xl font-bold">{allPoints.length.toLocaleString()}</p>
-                                    <p className="text-muted-foreground">Total records fetched from database.</p>
-                                    <p className="mt-4 text-2xl font-bold">{debugPoints.length}</p>
-                                    <p className="text-muted-foreground">Random non-zero points being displayed on map.</p>
-                                </div>
-                            )}
+                            </ScrollArea>
                         </CardContent>
                     </Card>
                 </div>
@@ -192,11 +239,11 @@ export default function PlaygroundPage() {
                                  <div className="absolute inset-0 flex items-center justify-center">
                                     <p className="text-destructive text-center max-w-sm">{error}</p>
                                 </div>
-                            ) : debugPoints.length > 0 ? (
-                               <MapComponent points={debugPoints} />
+                            ) : selectedSession ? (
+                               <MapComponent session={selectedSession} />
                             ) : (
                                  <div className="absolute inset-0 flex items-center justify-center">
-                                    <p className="text-muted-foreground text-lg">No valid (non-zero) data points found.</p>
+                                    <p className="text-muted-foreground text-lg">Select a session to view its route.</p>
                                 </div>
                             )
                          ) : (
@@ -210,3 +257,4 @@ export default function PlaygroundPage() {
         </div>
     );
 }
+
