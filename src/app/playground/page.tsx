@@ -34,7 +34,7 @@ const SESSION_GAP_THRESHOLD = 60 * 60 * 1000; // 1 hour in milliseconds
 // --- Utility Functions ---
 function haversineDistance(coords1: { lat: number; lng: number }, coords2: { lat: number; lng: number }): number {
     const toRad = (x: number) => (x * Math.PI) / 180;
-    const R = 6371; // Earth radius in km
+    const R = 6371000; // Earth radius in meters
 
     const dLat = toRad(coords2.lat - coords1.lat);
     const dLon = toRad(coords2.lng - coords1.lng);
@@ -46,7 +46,7 @@ function haversineDistance(coords1: { lat: number; lng: number }, coords2: { lat
         Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
-    return R * c; // Distance in km
+    return R * c; // Distance in meters
 }
 
 
@@ -58,20 +58,21 @@ const SessionStats: FC<{ session: Session | null }> = ({ session }) => {
             return { distance: 0, avgSpeed: 0 };
         }
 
-        let totalDistance = 0;
+        let totalDistance = 0; // in meters
         const totalTimeSeconds = (new Date(session[session.length - 1].created_at).getTime() - new Date(session[0].created_at).getTime()) / 1000;
 
         for (let i = 1; i < session.length; i++) {
             const p1 = session[i - 1];
             const p2 = session[i];
-            totalDistance += haversineDistance(p1, p2); // km
+            totalDistance += haversineDistance(p1, p2); 
         }
 
-        const avgSpeed = totalTimeSeconds > 0 ? (totalDistance / totalTimeSeconds) * 3600 : 0; // km/h
+        const avgSpeedMs = totalTimeSeconds > 0 ? (totalDistance / totalTimeSeconds) : 0; // m/s
+        const avgSpeedKmh = avgSpeedMs * 3.6; // km/h
 
         return {
-            distance: totalDistance,
-            avgSpeed: avgSpeed,
+            distance: totalDistance / 1000, // convert to km for display
+            avgSpeed: avgSpeedKmh,
         };
     }, [session]);
     
@@ -89,7 +90,7 @@ const SessionStats: FC<{ session: Session | null }> = ({ session }) => {
                     <p className="text-xs text-muted-foreground">Total Distance (km)</p>
                 </div>
                  <div className="flex flex-col items-center gap-1">
-                    <MoveRight className="h-6 w-6 text-primary" />
+                    <Gauge className="h-6 w-6 text-primary" />
                     <p className="text-2xl font-bold">{stats.avgSpeed.toFixed(1)}</p>
                     <p className="text-xs text-muted-foreground">Avg Speed (km/h)</p>
                 </div>
@@ -240,6 +241,11 @@ export default function PlaygroundPage() {
         if (session.length < 2) return "0 minutes";
         const start = new Date(session[0].created_at);
         const end = new Date(session[session.length - 1].created_at);
+        const durationSeconds = (end.getTime() - start.getTime()) / 1000;
+        
+        if (durationSeconds < 60) return `${Math.round(durationSeconds)} seconds`;
+        if (durationSeconds < 3600) return `${Math.round(durationSeconds / 60)} minutes`;
+
         const duration = formatDistanceToNow(end, { compareDate: start });
         return `${formatDistanceToNow(start, { addSuffix: true })} for ${duration}`;
     }
@@ -329,4 +335,5 @@ export default function PlaygroundPage() {
             </main>
         </div>
     );
-}
+
+    
