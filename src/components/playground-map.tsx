@@ -1,10 +1,9 @@
 
-"use client"
+"use client";
 
-import { MapContainer, TileLayer, Polyline, useMap } from 'react-leaflet';
-import { useEffect, useMemo, FC } from 'react';
-import type { LatLngExpression } from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import Image from 'next/image';
+import { FC, useMemo } from 'react';
+import { Loader2 } from 'lucide-react';
 
 // --- Types ---
 type RouteSegment = {
@@ -29,50 +28,127 @@ const getSpeedColor = (speedKmh: number) => {
     return '#ef4444'; // Red
 }
 
-// --- Map Components ---
-
-const RouteLayer: FC<{ session: SessionWithStats | null }> = ({ session }) => {
-    const map = useMap();
-    
-    const bounds = useMemo(() => {
-        if (!session || session.points.length === 0) return null;
-        return session.points.map(p => [p.lat, p.lng] as [number, number]);
-    }, [session]);
-
-    useEffect(() => {
-        if (bounds) {
-            map.fitBounds(bounds, { padding: [50, 50] });
-        } else {
-            map.setView([51.505, -0.09], 13);
-        }
-    }, [bounds, map]);
-
-    if (!session) return null;
-
-    return (
-        <>
-            {session.stats.routeSegments.map((segment, index) => (
-                <Polyline
-                    key={index}
-                    positions={segment.coords as LatLngExpression[]}
-                    color={getSpeedColor(segment.speedKmh)}
-                    weight={5}
-                />
-            ))}
-        </>
-    );
+// Function to convert lat/lng to pixel coordinates on a map tile
+function latLngToPoint(lat: number, lng: number, zoom: number) {
+    const siny = Math.sin(lat * Math.PI / 180);
+    const x = (lng + 180) / 360;
+    const y = (1 - Math.log((1 + siny) / (1 - siny)) / (2 * Math.PI)) / 2;
+    const mapSize = 256 * Math.pow(2, zoom);
+    return {
+        x: x * mapSize,
+        y: y * mapSize,
+    };
 }
 
-const PlaygroundMap: FC<{ session: SessionWithStats | null }> = ({ session }) => {
+const StaticMap: FC<{ session: SessionWithStats | null }> = ({ session }) => {
+    const mapData = useMemo(() => {
+        if (!session || session.points.length < 2) return null;
+
+        const lats = session.points.map(p => p.lat);
+        const lngs = session.points.map(p => p.lng);
+        const minLat = Math.min(...lats);
+        const maxLat = Math.max(...lats);
+        const minLng = Math.min(...lngs);
+        const maxLng = Math.max(...lngs);
+
+        const centerLat = (minLat + maxLat) / 2;
+        const centerLng = (minLng + maxLng) / 2;
+        
+        // A simple heuristic for zoom level
+        const lngDiff = maxLng - minLng;
+        const zoom = Math.max(1, Math.min(18, Math.floor(Math.log2(360 / lngDiff))));
+
+        const centerPoint = latLngToPoint(centerLat, centerLng, zoom);
+        
+        // Define SVG viewBox dimensions
+        const width = 800;
+        const height = 600;
+        const TILE_SIZE = 256;
+
+        const tileX = Math.floor(centerPoint.x / TILE_SIZE);
+        const tileY = Math.floor(centerPoint.y / TILE_SIZE);
+
+        const tileUrl = `https://tile.openstreetmap.org/${zoom}/${tileX}/${tileY}.png`;
+
+        const centralTilePixelX = tileX * TILE_SIZE;
+        const centralTilePixelY = tileY * TILE_SIZE;
+
+        const projectedPoints = session.stats.routeSegments.map(segment => {
+            const p1 = latLngToPoint(segment.coords[0][0], segment.coords[0][1], zoom);
+            const p2 = latLngToPoint(segment.coords[1][0], segment.coords[1][1], zoom);
+
+            // Translate points relative to the SVG canvas
+            const x1 = p1.x - centralTilePixelX + (width / 2);
+            const y1 = p1.y - centralTilePixelY + (height / 2);
+            const x2 = p2.x - centralTilePixelX + (width / 2);
+            const y2 = p2.y - centralTilePixelY + (height / 2);
+            
+            return {
+                path: `M${x1},${y1} L${x2},${y2}`,
+                color: getSpeedColor(segment.speedKmh),
+            }
+        });
+
+        return {
+            viewBox: `0 0 ${width} ${height}`,
+            paths: projectedPoints,
+            tileUrl,
+            width,
+            height
+        };
+    }, [session]);
+
+    if (!session) {
+        return (
+            <div className="flex items-center justify-center h-full bg-muted/30 rounded-lg">
+                <MapPin className="h-8 w-8 text-muted-foreground" />
+                <p className="ml-2 text-muted-foreground">Select a session to see the route</p>
+            </div>
+        );
+    }
+
+    if (!mapData) {
+        return (
+            <div className="flex items-center justify-center h-full bg-muted/30 rounded-lg">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+        );
+    }
+    
     return (
-        <MapContainer center={[51.505, -0.09]} zoom={13} scrollWheelZoom={true} style={{ height: '100%', width: '100%', borderRadius: '1rem' }}>
-            <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        <div className="relative w-full h-full">
+            <Image
+                src={mapData.tileUrl}
+                alt="Map background"
+                layout="fill"
+                objectFit="none" // Center the single tile
+                className="rounded-lg"
+                unoptimized
             />
-            <RouteLayer session={session} />
-        </MapContainer>
+            <svg
+                width="100%"
+                height="100%"
+                viewBox={mapData.viewBox}
+                className="absolute inset-0"
+            >
+                <g>
+                    {mapData.paths.map((p, index) => (
+                        <path
+                            key={index}
+                            d={p.path}
+                            stroke={p.color}
+                            strokeWidth="4"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            fill="none"
+                        />
+                    ))}
+                </g>
+            </svg>
+        </div>
     );
 };
 
-export default PlaygroundMap;
+export default StaticMap;
+
+    

@@ -2,7 +2,6 @@
 "use client";
 
 import { useState, useEffect, useMemo, FC } from 'react';
-import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -10,8 +9,7 @@ import { ArrowLeft, Loader2, MapPin, Clock, Hash, MoveRight, Gauge, Waypoints, T
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { formatDistanceStrict } from 'date-fns';
-import 'leaflet/dist/leaflet.css';
-
+import StaticMap from '@/components/playground-map';
 
 // --- Types ---
 type LocationData = {
@@ -65,17 +63,6 @@ function haversineDistance(coords1: { lat: number; lng: number }, coords2: { lat
 
 
 // --- Components ---
-const DynamicMap = dynamic(() => import('@/components/playground-map'), {
-  ssr: false,
-  loading: () => <MapPlaceholder />,
-});
-
-const MapPlaceholder = () => (
-    <div className="flex items-center justify-center h-full bg-muted/30 rounded-lg">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-    </div>
-);
-
 const SessionStatsDisplay: FC<{ session: SessionWithStats | null }> = ({ session }) => {
     if (!session) return null;
     const { distance, avgSpeedKmh, maxSpeedKmh } = session.stats;
@@ -280,9 +267,11 @@ export default function PlaygroundPage() {
                 </div>
 
                 <div className="md:col-span-2 bg-muted/20 border rounded-2xl shadow-inner p-2 relative overflow-hidden">
-                   <DynamicMap session={selectedSession} />
+                   <StaticMap session={selectedSession} />
                 </div>
             </main>
         </div>
     );
 }
+
+    
