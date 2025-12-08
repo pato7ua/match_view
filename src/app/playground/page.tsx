@@ -10,7 +10,6 @@ import { ArrowLeft, Loader2, Clock, Hash, MoveRight, Gauge, Waypoints, TrendingU
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { formatDistanceStrict } from 'date-fns';
-import 'leaflet/dist/leaflet.css';
 
 // --- Types ---
 type LocationData = {
