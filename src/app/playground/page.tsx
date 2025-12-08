@@ -190,7 +190,22 @@ export default function PlaygroundPage() {
                             routeSegments
                         }
                     };
-                }).filter(s => s.stats.distance > 0.01 && s.stats.avgSpeedKmh > MIN_AVG_SPEED_KMH) // 3. Filter out tiny/noisy/stationary sessions
+                }).filter(s => {
+                    const stats = s.stats;
+                    // Basic sanity checks for a valid session
+                    if (stats.distance < 0.01 || stats.avgSpeedKmh < MIN_AVG_SPEED_KMH) {
+                        return false;
+                    }
+                    // Filter out sessions shorter than a minute
+                    if (stats.durationSeconds < 60) {
+                        return false;
+                    }
+                    // Filter out sessions with anomalous speed spikes (high max, low avg)
+                    if (stats.maxSpeedKmh > 100 && stats.avgSpeedKmh < 10) {
+                        return false;
+                    }
+                    return true;
+                }) 
                   .reverse(); // Show most recent first
 
                 setSessions(sessionsWithStats); 
