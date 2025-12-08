@@ -6,9 +6,7 @@ import { MapContainer, TileLayer, Polyline, useMap, CircleMarker, Tooltip } from
 import type { LatLngBoundsExpression } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { SessionWithStats, RouteSegment } from '@/app/playground/page';
-import { MapPin } from 'lucide-react';
-import { Loader2 } from 'lucide-react';
-import dynamic from 'next/dynamic';
+import { MapPin, Loader2 } from 'lucide-react';
 
 const getSpeedColor = (speedKmh: number): string => {
     if (speedKmh < 5) return '#3b82f6'; // Blue
@@ -64,7 +62,7 @@ const RouteLayer: FC<{ session: SessionWithStats | null }> = memo(({ session }) 
 RouteLayer.displayName = 'RouteLayer';
 
 
-const Map: FC<{ session: SessionWithStats | null }> = ({ session }) => {
+const PlaygroundMap: FC<{ session: SessionWithStats | null }> = ({ session }) => {
     if (!session) {
         return (
             <div className="flex items-center justify-center h-full bg-muted/30 rounded-lg">
@@ -90,11 +88,7 @@ const Map: FC<{ session: SessionWithStats | null }> = ({ session }) => {
     );
 };
 
-const PlaygroundMap = dynamic(() => Promise.resolve(Map), {
-    ssr: false,
-    loading: () => <div className="flex items-center justify-center h-full bg-muted/30 rounded-lg"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>,
-});
-
 
 export default memo(PlaygroundMap);
 
+    

@@ -4,12 +4,18 @@
 import { useState, useEffect, useMemo, FC } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Loader2, Clock, Hash, MoveRight, Gauge, TrendingUp, Waypoints } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { formatDistanceStrict } from 'date-fns';
-import PlaygroundMap from '@/components/playground-map';
+// Import PlaygroundMap dynamically
+const PlaygroundMap = dynamic(() => import('@/components/playground-map'), {
+    ssr: false,
+    loading: () => <div className="flex items-center justify-center h-full bg-muted/30 rounded-lg"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>,
+});
+
 
 // --- Types ---
 type LocationData = {
@@ -73,19 +79,19 @@ const SessionStatsDisplay: FC<{ session: SessionWithStats | null }> = ({ session
                 <CardTitle>Session Stats</CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-3 gap-2 text-center">
-                 <div className="flex flex-col items-center gap-1">
-                    <Waypoints className="h-5 w-5 text-primary" />
-                    <p className="text-xl font-bold">{distance.toFixed(2)}</p>
+                 <div className="flex flex-col items-center gap-1 p-2 rounded-lg bg-primary/10">
+                    <Waypoints className="h-6 w-6 text-primary" />
+                    <p className="text-xl font-bold mt-2">{distance.toFixed(2)}</p>
                     <p className="text-xs text-muted-foreground">Distance (km)</p>
                 </div>
-                 <div className="flex flex-col items-center gap-1">
-                    <Gauge className="h-5- w-5 text-primary" />
-                    <p className="text-xl font-bold">{avgSpeedKmh.toFixed(1)}</p>
+                 <div className="flex flex-col items-center gap-1 p-2 rounded-lg bg-primary/10">
+                    <Gauge className="h-6 w-6 text-primary" />
+                    <p className="text-xl font-bold mt-2">{avgSpeedKmh.toFixed(1)}</p>
                     <p className="text-xs text-muted-foreground">Avg Speed (km/h)</p>
                 </div>
-                <div className="flex flex-col items-center gap-1">
-                    <TrendingUp className="h-5 w-5 text-primary" />
-                    <p className="text-xl font-bold">{maxSpeedKmh.toFixed(1)}</p>
+                <div className="flex flex-col items-center gap-1 p-2 rounded-lg bg-primary/10">
+                    <TrendingUp className="h-6 w-6 text-primary" />
+                    <p className="text-xl font-bold mt-2">{maxSpeedKmh.toFixed(1)}</p>
                     <p className="text-xs text-muted-foreground">Max Speed (km/h)</p>
                 </div>
             </CardContent>
@@ -272,3 +278,5 @@ export default function PlaygroundPage() {
         </div>
     );
 }
+
+    
