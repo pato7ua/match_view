@@ -6,10 +6,13 @@ import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Loader2, Clock, Hash, MoveRight, Gauge, TrendingUp, Waypoints } from 'lucide-react';
+import { ArrowLeft, Loader2, Clock, Hash, MoveRight, Gauge, TrendingUp, Waypoints, Trash2 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { formatDistanceStrict } from 'date-fns';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { useToast } from '@/hooks/use-toast';
+
 
 const PlaygroundMap = dynamic(() => import('@/components/playground-map'), {
     ssr: false,
@@ -106,6 +109,8 @@ export default function PlaygroundPage() {
     const [selectedSession, setSelectedSession] = useState<SessionWithStats | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [sessionToDelete, setSessionToDelete] = useState<SessionWithStats | null>(null);
+    const { toast } = useToast();
 
     useEffect(() => {
         const fetchAndProcessData = async () => {
@@ -230,7 +235,33 @@ export default function PlaygroundPage() {
         const start = new Date();
         const end = new Date(start.getTime() + durationSeconds * 1000);
         return formatDistanceStrict(end, start, { roundingMethod: 'round' });
-    }
+    };
+
+    const handleDeleteSession = async () => {
+        if (!sessionToDelete) return;
+
+        const pointIds = sessionToDelete.points.map(p => p.id);
+
+        try {
+            const { error } = await supabase
+                .from('tracker_logs')
+                .delete()
+                .in('id', pointIds);
+
+            if (error) throw error;
+            
+            setSessions(prev => prev.filter(s => s.stats.startTime !== sessionToDelete.stats.startTime));
+            if (selectedSession?.stats.startTime === sessionToDelete.stats.startTime) {
+                setSelectedSession(null);
+            }
+            setSessionToDelete(null);
+            toast({ title: "Session Deleted", description: `Session with ${pointIds.length} data points has been removed.` });
+
+        } catch (err: any) {
+            toast({ variant: 'destructive', title: "Deletion Failed", description: err.message || "Could not delete session." });
+        }
+    };
+
 
     return (
         <div className="flex h-dvh w-full flex-col overflow-hidden bg-background">
@@ -268,18 +299,28 @@ export default function PlaygroundPage() {
                                     <p className="text-sm text-destructive">{error}</p>
                                 ) : sessions.length > 0 ? (
                                     sessions.map((sessionWithStats, index) => (
-                                        <button key={sessionWithStats.stats.startTime} onClick={() => setSelectedSession(sessionWithStats)} className="w-full text-left">
-                                            <Card className={`transition-all hover:border-primary ${selectedSession?.stats.startTime === sessionWithStats.stats.startTime ? 'border-primary bg-primary/10' : ''}`}>
-                                                <CardContent className="p-4">
-                                                    <p className="font-semibold">Session {sessions.length - index}</p>
-                                                    <div className="text-sm text-muted-foreground mt-2 space-y-1">
-                                                        <div className="flex items-center gap-2"><Clock className="h-3.5 w-3.5" /> <span>{sessionWithStats.stats.startTime}</span></div>
-                                                        <div className="flex items-center gap-2"><MoveRight className="h-3.5 w-3.5" /> <span>Duration: {getSessionDuration(sessionWithStats)}</span></div>
-                                                        <div className="flex items-center gap-2"><Hash className="h-3.5 w-3.5" /> <span>{sessionWithStats.stats.pointCount} data points</span></div>
-                                                    </div>
-                                                </CardContent>
-                                            </Card>
-                                        </button>
+                                        <Card key={sessionWithStats.stats.startTime} className={`transition-all hover:border-primary relative group ${selectedSession?.stats.startTime === sessionWithStats.stats.startTime ? 'border-primary bg-primary/10' : ''}`}>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="absolute top-2 right-2 h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setSessionToDelete(sessionWithStats);
+                                                }}
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                                <span className="sr-only">Delete session</span>
+                                            </Button>
+                                            <button onClick={() => setSelectedSession(sessionWithStats)} className="w-full text-left p-4 block">
+                                                <p className="font-semibold pr-8">Session {sessions.length - index}</p>
+                                                <div className="text-sm text-muted-foreground mt-2 space-y-1">
+                                                    <div className="flex items-center gap-2"><Clock className="h-3.5 w-3.5" /> <span>{sessionWithStats.stats.startTime}</span></div>
+                                                    <div className="flex items-center gap-2"><MoveRight className="h-3.5 w-3.5" /> <span>Duration: {getSessionDuration(sessionWithStats)}</span></div>
+                                                    <div className="flex items-center gap-2"><Hash className="h-3.5 w-3.5" /> <span>{sessionWithStats.stats.pointCount} data points</span></div>
+                                                </div>
+                                            </button>
+                                        </Card>
                                     ))
                                 ) : <p className="text-muted-foreground">No valid sessions found. Try adjusting filter constants.</p>
                             }
@@ -294,6 +335,21 @@ export default function PlaygroundPage() {
                    <PlaygroundMap session={selectedSession} />
                 </div>
             </main>
+             <AlertDialog open={!!sessionToDelete} onOpenChange={(open) => !open && setSessionToDelete(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This will permanently delete the session from {sessionToDelete?.stats.startTime} with {sessionToDelete?.stats.pointCount} data points. This action cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDeleteSession}>Delete</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
-}
+
+    
