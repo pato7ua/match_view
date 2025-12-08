@@ -49,7 +49,6 @@ export type SessionWithStats = {
 
 const SESSION_GAP_THRESHOLD_SECONDS = 5 * 60; // 5 minutes
 const MAX_REASONABLE_SPEED_KMH = 160; // Increased for car travel
-const MOVING_AVERAGE_WINDOW = 3;
 
 // --- Utility Functions ---
 function haversineDistance(coords1: { lat: number; lng: number }, coords2: { lat: number; lng: number }): number {
@@ -137,46 +136,23 @@ export default function PlaygroundPage() {
                                      filteredData.push(p2);
                                  }
                              } else {
-                                // if time difference is zero, it's likely a duplicate point, keep it for now, smoothing will handle it
+                                // if time difference is zero, it's likely a duplicate point, keep it
                                 filteredData.push(p2);
                              }
                         }
                     }
                 }
                 
-                // --- 2. Apply moving average to smooth flutter ---
-                let smoothedData: LocationData[] = [];
-                if (filteredData.length >= MOVING_AVERAGE_WINDOW) {
-                     smoothedData = filteredData.map((_point, i, arr) => {
-                        if (i < MOVING_AVERAGE_WINDOW - 1) {
-                             // For the first few points, just return them as is, but create a copy
-                            return { ...arr[i] };
-                        }
-                        
-                        // Get the window of points to average
-                        const window = arr.slice(i - (MOVING_AVERAGE_WINDOW - 1), i + 1);
-                        
-                        const sumLat = window.reduce((acc, p) => acc + p.lat, 0);
-                        const sumLng = window.reduce((acc, p) => acc + p.lng, 0);
-
-                        return {
-                            ...arr[i], // Keep original timestamp and id
-                            lat: sumLat / MOVING_AVERAGE_WINDOW,
-                            lng: sumLng / MOVING_AVERAGE_WINDOW,
-                        };
-                    });
-                } else {
-                    smoothedData.push(...filteredData.map(p => ({...p}))); // create copies
-                }
+                const processedData = filteredData;
 
 
-                if (smoothedData.length > 0) {
+                if (processedData.length > 0) {
                     const identifiedSessions: Session[] = [];
-                    let currentSession: Session = [smoothedData[0]];
+                    let currentSession: Session = [processedData[0]];
 
-                    for (let i = 1; i < smoothedData.length; i++) {
-                        const prevPoint = smoothedData[i - 1];
-                        const currentPoint = smoothedData[i];
+                    for (let i = 1; i < processedData.length; i++) {
+                        const prevPoint = processedData[i - 1];
+                        const currentPoint = processedData[i];
                         if (!currentPoint || !prevPoint) continue;
                         
                         const timeDiffSeconds = (new Date(currentPoint.gps_time).getTime() - new Date(prevPoint.gps_time).getTime()) / 1000;
