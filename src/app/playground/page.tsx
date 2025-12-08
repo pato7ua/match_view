@@ -13,10 +13,6 @@ import 'leaflet/dist/leaflet.css';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { formatDistanceStrict } from 'date-fns';
 
-// --- Dynamic Imports for Leaflet components ---
-// Note: We are importing Leaflet itself dynamically as well
-const L = dynamic(() => import('leaflet'), { ssr: false });
-
 // --- Types ---
 type LocationData = {
   id: number;
@@ -48,7 +44,6 @@ type SessionWithStats = {
 }
 
 const SESSION_GAP_THRESHOLD_SECONDS = 5 * 60; // 5 minutes
-const POSITION_CHANGE_THRESHOLD_METERS = 10;
 
 // --- Utility Functions ---
 function haversineDistance(coords1: { lat: number; lng: number }, coords2: { lat: number; lng: number }): number {
@@ -108,65 +103,57 @@ const getSpeedColor = (speedKmh: number) => {
     return '#ef4444'; // Red
 }
 
-const MapComponent: FC<{ session: SessionWithStats | null }> = ({ session }) => {
-    const mapRef = useRef<Map | null>(null);
-    const mapContainerRef = useRef<HTMLDivElement>(null);
-    const routeLayerRef = useRef<any>(null); // To hold the group of polylines
+// --- Dynamic Imports for Leaflet components ---
+const MapContainer = dynamic(() => import('react-leaflet').then(mod => mod.MapContainer), { ssr: false });
+const TileLayer = dynamic(() => import('react-leaflet').then(mod => mod.TileLayer), { ssr: false });
+const Polyline = dynamic(() => import('react-leaflet').then(mod => mod.Polyline), { ssr: false });
+const useMap = dynamic(() => import('react-leaflet').then(mod => mod.useMap), { ssr: false });
 
+const UpdateMapCenter: FC<{ bounds: LatLngExpression[] }> = ({ bounds }) => {
+    const map = useMap();
     useEffect(() => {
-        if (!mapContainerRef.current || mapRef.current || !L) return;
-
-        mapRef.current = L.map(mapContainerRef.current, {
-            center: [51.505, -0.09],
-            zoom: 13,
-            scrollWheelZoom: true,
-        });
-
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        }).addTo(mapRef.current);
-        
-        return () => {
-            if (mapRef.current) {
-                mapRef.current.remove();
-                mapRef.current = null;
-            }
-        };
-    }, [L]);
-
-    useEffect(() => {
-        if (!mapRef.current || !L) return;
-        
-        const map = mapRef.current;
-
-        // Clear previous route
-        if (routeLayerRef.current) {
-            map.removeLayer(routeLayerRef.current);
+        if (bounds.length > 0) {
+            map.fitBounds(bounds, { padding: [50, 50] });
         }
-
-        if (session && session.stats.routeSegments.length > 0) {
-            const polylines = session.stats.routeSegments.map(segment => 
-                L.polyline(segment.coords as LatLngExpression[], { 
-                    color: getSpeedColor(segment.speedKmh),
-                    weight: 5 
-                })
-            );
-            
-            routeLayerRef.current = L.layerGroup(polylines).addTo(map);
-
-            const bounds = session.points.map(p => [p.lat, p.lng] as [number, number]);
-            if(bounds.length > 0) {
-                map.fitBounds(bounds);
-            }
-        } else {
-             map.setView([51.505, -0.09], 13);
-        }
-
-    }, [session, L]);
-
-
-    return <div ref={mapContainerRef} style={{ height: '100%', width: '100%', borderRadius: '1rem' }} />;
+    }, [bounds, map]);
+    return null;
 };
+
+const MapComponent: FC<{ session: SessionWithStats | null }> = ({ session }) => {
+    const bounds = useMemo(() => {
+        if (!session || session.points.length === 0) return [];
+        return session.points.map(p => [p.lat, p.lng] as [number, number]);
+    }, [session]);
+
+    return (
+        <MapContainer center={[51.505, -0.09]} zoom={13} scrollWheelZoom={true} style={{ height: '100%', width: '100%', borderRadius: '1rem' }}>
+            <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            {session && session.stats.routeSegments.map((segment, index) => (
+                <Polyline
+                    key={index}
+                    positions={segment.coords as LatLngExpression[]}
+                    color={getSpeedColor(segment.speedKmh)}
+                    weight={5}
+                />
+            ))}
+            {bounds.length > 0 && <UpdateMapCenter bounds={bounds} />}
+        </MapContainer>
+    );
+};
+
+const MapPlaceholder = () => (
+    <div className="flex items-center justify-center h-full">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+    </div>
+);
+
+const DynamicMap = dynamic(() => Promise.resolve(MapComponent), {
+  ssr: false,
+  loading: () => <MapPlaceholder />,
+});
 
 
 export default function PlaygroundPage() {
@@ -174,12 +161,7 @@ export default function PlaygroundPage() {
     const [selectedSession, setSelectedSession] = useState<SessionWithStats | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [isClient, setIsClient] = useState(false);
 
-    useEffect(() => {
-        setIsClient(true);
-    }, []);
-    
     useEffect(() => {
         const fetchAndProcessData = async () => {
             try {
@@ -189,8 +171,6 @@ export default function PlaygroundPage() {
                 let { data: allData, error } = await supabase
                     .from('tracker_logs')
                     .select('id, lat, lng, gps_time')
-                    .neq('lat', 0)
-                    .neq('lng', 0)
                     .order('gps_time', { ascending: true });
 
                 if (error) throw error;
@@ -206,7 +186,6 @@ export default function PlaygroundPage() {
                         if (!currentPoint || !prevPoint) continue;
                         
                         const timeDiffSeconds = (new Date(currentPoint.gps_time).getTime() - new Date(prevPoint.gps_time).getTime()) / 1000;
-                        const posChangeMeters = haversineDistance(prevPoint, currentPoint);
 
                         if (timeDiffSeconds > SESSION_GAP_THRESHOLD_SECONDS) {
                            if (currentSession.length > 1) identifiedSessions.push(currentSession);
@@ -238,7 +217,7 @@ export default function PlaygroundPage() {
 
                                     const currentSpeedMs = distance / timeDiff;
                                     
-                                    // Only consider speed realistic if time diff is not too small
+                                    // Only consider speed realistic if time diff is not too small (e.g. > 0.5s) to avoid GPS jumps
                                     if (timeDiff > 0.5 && currentSpeedMs > maxSpeedMs) {
                                         maxSpeedMs = currentSpeedMs;
                                     }
@@ -351,29 +330,19 @@ export default function PlaygroundPage() {
                 </div>
 
                 <div className="md:col-span-2 bg-muted/20 border rounded-2xl shadow-inner p-2 relative overflow-hidden">
-                    <div className="relative w-full h-full">
-                         {isClient ? (
-                            isLoading ? (
-                                <div className="absolute inset-0 flex items-center justify-center">
-                                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                                </div>
-                            ) : error ? (
-                                 <div className="absolute inset-0 flex items-center justify-center">
-                                    <p className="text-destructive text-center max-w-sm">{error}</p>
-                                </div>
-                            ) : (
-                               <MapComponent session={selectedSession} />
-                            )
-                         ) : (
-                            <div className="flex items-center justify-center h-full">
-                                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                            </div>
-                         )}
-                    </div>
+                    {isLoading ? (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                        </div>
+                    ) : error ? (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                            <p className="text-destructive text-center max-w-sm">{error}</p>
+                        </div>
+                    ) : (
+                        <DynamicMap session={selectedSession} />
+                    )}
                 </div>
             </main>
         </div>
     );
 }
-
-    
