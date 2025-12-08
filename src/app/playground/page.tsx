@@ -1,17 +1,19 @@
 
 "use client";
 
-import { useState, useEffect, useMemo, FC, useRef } from 'react';
+import { useState, useEffect, useMemo, FC } from 'react';
 import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Loader2, MapPin, Clock, Hash, MoveRight, Gauge, Waypoints, TrendingUp } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
-import type { LatLngExpression, Map as LeafletMap, Polyline as LeafletPolyline } from 'leaflet';
+import type { LatLngExpression } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { formatDistanceStrict } from 'date-fns';
+import { useMap } from 'react-leaflet/hooks';
+
 
 // --- Dynamic Imports for Leaflet components ---
 const MapContainer = dynamic(() => import('react-leaflet').then(mod => mod.MapContainer), { ssr: false });
@@ -29,6 +31,11 @@ type LocationData = {
 
 type Session = LocationData[];
 
+type RouteSegment = {
+    coords: [number, number][];
+    speedKmh: number;
+};
+
 type SessionStats = {
     distance: number; // in km
     durationSeconds: number;
@@ -36,6 +43,7 @@ type SessionStats = {
     startTime: string;
     avgSpeedKmh: number;
     maxSpeedKmh: number; // in km/h
+    routeSegments: RouteSegment[];
 };
 
 type SessionWithStats = {
@@ -96,52 +104,49 @@ const SessionStatsDisplay: FC<{ session: SessionWithStats | null }> = ({ session
     );
 };
 
+const UpdateMapCenter: FC<{bounds: LatLngExpression[] | undefined}> = ({ bounds }) => {
+    const map = useMap();
+    useEffect(() => {
+        if (bounds && bounds.length > 0) {
+            map.fitBounds(bounds as [[number, number]]);
+        } else {
+            map.setView([51.505, -0.09], 13); // Default to London if no bounds
+        }
+    }, [bounds, map]);
+    return null;
+}
+
+const getSpeedColor = (speedKmh: number) => {
+    if (speedKmh < 5) return '#3b82f6'; // Blue
+    if (speedKmh < 15) return '#22c55e'; // Green
+    if (speedKmh < 25) return '#f97316'; // Orange
+    return '#ef4444'; // Red
+}
 
 const MapComponent: FC<{ session: SessionWithStats | null }> = ({ session }) => {
-    const mapRef = useRef<HTMLDivElement>(null);
-    const mapInstance = useRef<LeafletMap | null>(null);
-    const polylineRef = useRef<LeafletPolyline | null>(null);
+    const bounds = useMemo(() => {
+        if (!session || session.points.length === 0) return undefined;
+        const latLngs = session.points.map(p => [p.lat, p.lng] as [number, number]);
+        return latLngs;
+    }, [session]);
 
-    useEffect(() => {
-        if (mapRef.current && !mapInstance.current) {
-             import('leaflet').then(L => {
-                mapInstance.current = L.map(mapRef.current!).setView([51.505, -0.09], 13);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                }).addTo(mapInstance.current);
-            });
-        }
-        
-        return () => {
-            if (mapInstance.current) {
-                mapInstance.current.remove();
-                mapInstance.current = null;
-            }
-        };
-    }, []);
-
-     useEffect(() => {
-        if (mapInstance.current && session && session.points.length > 0) {
-            import('leaflet').then(L => {
-                if (polylineRef.current) {
-                    polylineRef.current.remove();
-                }
-
-                const latLngs = session.points.map(p => [p.lat, p.lng] as [number, number]);
-                const newPolyline = L.polyline(latLngs, { color: 'blue' }).addTo(mapInstance.current!);
-                polylineRef.current = newPolyline;
-                
-                if (newPolyline.getBounds().isValid()) {
-                    mapInstance.current.fitBounds(newPolyline.getBounds(), { padding: [50, 50] });
-                }
-            });
-        } else if (mapInstance.current && !session && polylineRef.current) {
-            polylineRef.current.remove();
-        }
-     }, [session]);
-
-
-    return <div ref={mapRef} className="h-full w-full rounded-2xl" />;
+    return (
+        <MapContainer center={[51.505, -0.09]} zoom={13} scrollWheelZoom={true} style={{ height: '100%', width: '100%', borderRadius: '1rem' }}>
+            <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            {session && session.stats.routeSegments.map((segment, index) => (
+                <Polyline
+                    key={index}
+                    positions={segment.coords as LatLngExpression[]}
+                    color={getSpeedColor(segment.speedKmh)}
+                    weight={5}
+                />
+            ))}
+            <UpdateMapCenter bounds={bounds} />
+        </MapContainer>
+    );
 };
 
 
@@ -160,6 +165,8 @@ export default function PlaygroundPage() {
                 let { data: allData, error } = await supabase
                     .from('tracker_logs')
                     .select('id, lat, lng, gps_time')
+                    .neq('lat', 0)
+                    .neq('lng', 0)
                     .order('gps_time', { ascending: true });
 
                 if (error) throw error;
@@ -193,21 +200,30 @@ export default function PlaygroundPage() {
                         let totalDistanceMeters = 0;
                         let totalTimeSeconds = 0;
                         let maxSpeedMs = 0;
+                        const routeSegments: RouteSegment[] = [];
 
                         for (let i = 1; i < session.length; i++) {
                             const p1 = session[i-1];
                             const p2 = session[i];
                             if (p1 && p2) {
                                 const distance = haversineDistance(p1, p2);
-                                totalDistanceMeters += distance;
-
                                 const timeDiff = (new Date(p2.gps_time).getTime() - new Date(p1.gps_time).getTime()) / 1000;
+
                                 if (timeDiff > 0) {
+                                    totalDistanceMeters += distance;
                                     totalTimeSeconds += timeDiff;
+
                                     const currentSpeedMs = distance / timeDiff;
-                                    if (currentSpeedMs > maxSpeedMs) {
+                                    
+                                    // Only consider speed realistic if time diff is not too small
+                                    if (timeDiff > 0.5 && currentSpeedMs > maxSpeedMs) {
                                         maxSpeedMs = currentSpeedMs;
                                     }
+                                    
+                                    routeSegments.push({
+                                        coords: [[p1.lat, p1.lng], [p2.lat, p2.lng]],
+                                        speedKmh: currentSpeedMs * 3.6
+                                    });
                                 }
                             }
                         }
@@ -222,7 +238,8 @@ export default function PlaygroundPage() {
                                 pointCount: session.length,
                                 startTime: session[0] ? new Date(session[0].gps_time).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '',
                                 avgSpeedKmh: avgSpeedMs * 3.6,
-                                maxSpeedKmh: maxSpeedMs * 3.6
+                                maxSpeedKmh: maxSpeedMs * 3.6,
+                                routeSegments
                             }
                         };
                     }).reverse();
@@ -314,7 +331,7 @@ export default function PlaygroundPage() {
                     {selectedSession && <SessionStatsDisplay session={selectedSession} />}
                 </div>
 
-                <div className="md:col-span-2 bg-muted/20 border rounded-2xl shadow-inner p-4 relative overflow-hidden">
+                <div className="md:col-span-2 bg-muted/20 border rounded-2xl shadow-inner p-2 relative overflow-hidden">
                     <div className="relative w-full h-full">
                          {isClient ? (
                             isLoading ? (
@@ -325,12 +342,8 @@ export default function PlaygroundPage() {
                                  <div className="absolute inset-0 flex items-center justify-center">
                                     <p className="text-destructive text-center max-w-sm">{error}</p>
                                 </div>
-                            ) : selectedSession ? (
-                               <MapComponent session={selectedSession} />
                             ) : (
-                                 <div className="absolute inset-0 flex items-center justify-center">
-                                    <p className="text-muted-foreground text-lg">Select a session to view its route.</p>
-                                </div>
+                               <MapComponent session={selectedSession} />
                             )
                          ) : (
                             <div className="flex items-center justify-center h-full">
@@ -343,3 +356,5 @@ export default function PlaygroundPage() {
         </div>
     );
 }
+
+    
