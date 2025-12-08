@@ -1,25 +1,21 @@
 
 "use client";
 
-import { useState, useEffect, useMemo, FC } from 'react';
+import { useState, useEffect, useMemo, FC, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Loader2, MapPin, Clock, Hash, MoveRight, Gauge, Waypoints, TrendingUp } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
-import type { LatLngExpression } from 'leaflet';
+import type { LatLngExpression, Map } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { formatDistanceStrict } from 'date-fns';
-import { useMap } from 'react-leaflet/hooks';
-
 
 // --- Dynamic Imports for Leaflet components ---
-const MapContainer = dynamic(() => import('react-leaflet').then(mod => mod.MapContainer), { ssr: false });
-const TileLayer = dynamic(() => import('react-leaflet').then(mod => mod.TileLayer), { ssr: false });
-const Polyline = dynamic(() => import('react-leaflet').then(mod => mod.Polyline), { ssr: false });
-
+// Note: We are importing Leaflet itself dynamically as well
+const L = dynamic(() => import('leaflet'), { ssr: false });
 
 // --- Types ---
 type LocationData = {
@@ -52,6 +48,7 @@ type SessionWithStats = {
 }
 
 const SESSION_GAP_THRESHOLD_SECONDS = 5 * 60; // 5 minutes
+const POSITION_CHANGE_THRESHOLD_METERS = 10;
 
 // --- Utility Functions ---
 function haversineDistance(coords1: { lat: number; lng: number }, coords2: { lat: number; lng: number }): number {
@@ -104,18 +101,6 @@ const SessionStatsDisplay: FC<{ session: SessionWithStats | null }> = ({ session
     );
 };
 
-const UpdateMapCenter: FC<{bounds: LatLngExpression[] | undefined}> = ({ bounds }) => {
-    const map = useMap();
-    useEffect(() => {
-        if (bounds && bounds.length > 0) {
-            map.fitBounds(bounds as [[number, number]]);
-        } else {
-            map.setView([51.505, -0.09], 13); // Default to London if no bounds
-        }
-    }, [bounds, map]);
-    return null;
-}
-
 const getSpeedColor = (speedKmh: number) => {
     if (speedKmh < 5) return '#3b82f6'; // Blue
     if (speedKmh < 15) return '#22c55e'; // Green
@@ -123,38 +108,64 @@ const getSpeedColor = (speedKmh: number) => {
     return '#ef4444'; // Red
 }
 
-const RouteLayer: FC<{ session: SessionWithStats | null }> = ({ session }) => {
-    const bounds = useMemo(() => {
-        if (!session || session.points.length === 0) return undefined;
-        const latLngs = session.points.map(p => [p.lat, p.lng] as [number, number]);
-        return latLngs;
-    }, [session]);
-
-    return (
-        <>
-            {session && session.stats.routeSegments.map((segment, index) => (
-                <Polyline
-                    key={index}
-                    positions={segment.coords as LatLngExpression[]}
-                    color={getSpeedColor(segment.speedKmh)}
-                    weight={5}
-                />
-            ))}
-            <UpdateMapCenter bounds={bounds} />
-        </>
-    );
-};
-
 const MapComponent: FC<{ session: SessionWithStats | null }> = ({ session }) => {
-    return (
-        <MapContainer center={[51.505, -0.09]} zoom={13} scrollWheelZoom={true} style={{ height: '100%', width: '100%', borderRadius: '1rem' }}>
-            <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
-            <RouteLayer session={session} />
-        </MapContainer>
-    );
+    const mapRef = useRef<Map | null>(null);
+    const mapContainerRef = useRef<HTMLDivElement>(null);
+    const routeLayerRef = useRef<any>(null); // To hold the group of polylines
+
+    useEffect(() => {
+        if (!mapContainerRef.current || mapRef.current || !L) return;
+
+        mapRef.current = L.map(mapContainerRef.current, {
+            center: [51.505, -0.09],
+            zoom: 13,
+            scrollWheelZoom: true,
+        });
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        }).addTo(mapRef.current);
+        
+        return () => {
+            if (mapRef.current) {
+                mapRef.current.remove();
+                mapRef.current = null;
+            }
+        };
+    }, [L]);
+
+    useEffect(() => {
+        if (!mapRef.current || !L) return;
+        
+        const map = mapRef.current;
+
+        // Clear previous route
+        if (routeLayerRef.current) {
+            map.removeLayer(routeLayerRef.current);
+        }
+
+        if (session && session.stats.routeSegments.length > 0) {
+            const polylines = session.stats.routeSegments.map(segment => 
+                L.polyline(segment.coords as LatLngExpression[], { 
+                    color: getSpeedColor(segment.speedKmh),
+                    weight: 5 
+                })
+            );
+            
+            routeLayerRef.current = L.layerGroup(polylines).addTo(map);
+
+            const bounds = session.points.map(p => [p.lat, p.lng] as [number, number]);
+            if(bounds.length > 0) {
+                map.fitBounds(bounds);
+            }
+        } else {
+             map.setView([51.505, -0.09], 13);
+        }
+
+    }, [session, L]);
+
+
+    return <div ref={mapContainerRef} style={{ height: '100%', width: '100%', borderRadius: '1rem' }} />;
 };
 
 
@@ -195,12 +206,11 @@ export default function PlaygroundPage() {
                         if (!currentPoint || !prevPoint) continue;
                         
                         const timeDiffSeconds = (new Date(currentPoint.gps_time).getTime() - new Date(prevPoint.gps_time).getTime()) / 1000;
+                        const posChangeMeters = haversineDistance(prevPoint, currentPoint);
 
                         if (timeDiffSeconds > SESSION_GAP_THRESHOLD_SECONDS) {
-                            if (currentSession.length > 1) {
-                                identifiedSessions.push(currentSession);
-                            }
-                            currentSession = [currentPoint];
+                           if (currentSession.length > 1) identifiedSessions.push(currentSession);
+                           currentSession = [currentPoint];
                         } else {
                            currentSession.push(currentPoint);
                         }
