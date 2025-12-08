@@ -35,13 +35,15 @@ const RouteLayer: FC<{ session: SessionWithStats | null }> = ({ session }) => {
     const map = useMap();
     
     const bounds = useMemo(() => {
-        if (!session || session.points.length === 0) return [];
+        if (!session || session.points.length === 0) return null;
         return session.points.map(p => [p.lat, p.lng] as [number, number]);
     }, [session]);
 
     useEffect(() => {
-        if (bounds.length > 0) {
+        if (bounds) {
             map.fitBounds(bounds, { padding: [50, 50] });
+        } else {
+            map.setView([51.505, -0.09], 13);
         }
     }, [bounds, map]);
 
@@ -74,5 +76,3 @@ const PlaygroundMap: FC<{ session: SessionWithStats | null }> = ({ session }) =>
 };
 
 export default PlaygroundMap;
-
-    

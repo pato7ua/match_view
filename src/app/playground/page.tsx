@@ -71,7 +71,7 @@ const DynamicMap = dynamic(() => import('@/components/playground-map'), {
 });
 
 const MapPlaceholder = () => (
-    <div className="flex items-center justify-center h-full">
+    <div className="flex items-center justify-center h-full bg-muted/30 rounded-lg">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
     </div>
 );
@@ -286,5 +286,3 @@ export default function PlaygroundPage() {
         </div>
     );
 }
-
-    
