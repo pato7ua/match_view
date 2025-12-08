@@ -48,11 +48,13 @@ export type SessionWithStats = {
 }
 
 const SESSION_GAP_THRESHOLD_SECONDS = 5 * 60; // 5 minutes
+const MAX_REASONABLE_SPEED_KMH = 50; // Filter out points that would require moving > 50 km/h
+const MOVING_AVERAGE_WINDOW = 5;
 
 // --- Utility Functions ---
 function haversineDistance(coords1: { lat: number; lng: number }, coords2: { lat: number; lng: number }): number {
     const toRad = (x: number) => (x * Math.PI) / 180;
-    const R = 6371000; // Earth radius in meters
+    const R = 6371; // Earth radius in kilometers
 
     const dLat = toRad(coords2.lat - coords1.lat);
     const dLon = toRad(coords2.lng - coords1.lng);
@@ -64,7 +66,7 @@ function haversineDistance(coords1: { lat: number; lng: number }, coords2: { lat
         Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
-    return R * c; // Distance in meters
+    return R * c; // Distance in kilometers
 }
 
 
@@ -119,13 +121,58 @@ export default function PlaygroundPage() {
                 if (error) throw error;
                 if (!allData) allData = [];
                 
+                // --- 1. Filter out outliers ---
+                const filteredData: LocationData[] = [];
                 if (allData.length > 0) {
-                    const identifiedSessions: Session[] = [];
-                    let currentSession: Session = [allData[0]];
-
+                    filteredData.push(allData[0]); // Always include the first point
                     for (let i = 1; i < allData.length; i++) {
-                        const prevPoint = allData[i - 1];
-                        const currentPoint = allData[i];
+                        const p1 = allData[i-1];
+                        const p2 = allData[i];
+                        if (p1 && p2) {
+                             const distanceKm = haversineDistance(p1, p2);
+                             const timeDiffSeconds = (new Date(p2.gps_time).getTime() - new Date(p1.gps_time).getTime()) / 1000;
+                             if (timeDiffSeconds > 0) {
+                                 const speedKmh = (distanceKm / timeDiffSeconds) * 3600;
+                                 if (speedKmh < MAX_REASONABLE_SPEED_KMH) {
+                                     filteredData.push(p2);
+                                 }
+                             }
+                        }
+                    }
+                }
+                
+                // --- 2. Apply moving average to smooth flutter ---
+                const smoothedData: LocationData[] = [];
+                if (filteredData.length > MOVING_AVERAGE_WINDOW) {
+                    for (let i = 0; i < filteredData.length; i++) {
+                        if (i < MOVING_AVERAGE_WINDOW -1) {
+                             smoothedData.push(filteredData[i]);
+                        } else {
+                            let sumLat = 0;
+                            let sumLng = 0;
+                            for (let j = 0; j < MOVING_AVERAGE_WINDOW; j++) {
+                                sumLat += filteredData[i-j].lat;
+                                sumLng += filteredData[i-j].lng;
+                            }
+                            smoothedData.push({
+                                ...filteredData[i],
+                                lat: sumLat / MOVING_AVERAGE_WINDOW,
+                                lng: sumLng / MOVING_AVERAGE_WINDOW,
+                            });
+                        }
+                    }
+                } else {
+                    smoothedData.push(...filteredData);
+                }
+
+
+                if (smoothedData.length > 0) {
+                    const identifiedSessions: Session[] = [];
+                    let currentSession: Session = [smoothedData[0]];
+
+                    for (let i = 1; i < smoothedData.length; i++) {
+                        const prevPoint = smoothedData[i - 1];
+                        const currentPoint = smoothedData[i];
                         if (!currentPoint || !prevPoint) continue;
                         
                         const timeDiffSeconds = (new Date(currentPoint.gps_time).getTime() - new Date(prevPoint.gps_time).getTime()) / 1000;
@@ -142,47 +189,47 @@ export default function PlaygroundPage() {
                     }
 
                     const sessionsWithStats: SessionWithStats[] = identifiedSessions.map(session => {
-                        let totalDistanceMeters = 0;
+                        let totalDistanceKm = 0;
                         let totalTimeSeconds = 0;
-                        let maxSpeedMs = 0;
+                        let maxSpeedKmh = 0;
                         const routeSegments: RouteSegment[] = [];
 
                         for (let i = 1; i < session.length; i++) {
                             const p1 = session[i-1];
                             const p2 = session[i];
                             if (p1 && p2) {
-                                const distance = haversineDistance(p1, p2);
+                                const distance = haversineDistance(p1, p2); // in km
                                 const timeDiff = (new Date(p2.gps_time).getTime() - new Date(p1.gps_time).getTime()) / 1000;
 
                                 if (timeDiff > 0) {
-                                    totalDistanceMeters += distance;
+                                    totalDistanceKm += distance;
                                     totalTimeSeconds += timeDiff;
 
-                                    const currentSpeedMs = distance / timeDiff;
+                                    const currentSpeedKmh = (distance / timeDiff) * 3600;
                                     
-                                    if (timeDiff > 0.5 && currentSpeedMs > maxSpeedMs) {
-                                        maxSpeedMs = currentSpeedMs;
+                                    if (timeDiff > 0.5 && currentSpeedKmh > maxSpeedKmh) {
+                                        maxSpeedKmh = currentSpeedKmh;
                                     }
                                     
                                     routeSegments.push({
                                         coords: [[p1.lat, p1.lng], [p2.lat, p2.lng]],
-                                        speedKmh: currentSpeedMs * 3.6
+                                        speedKmh: currentSpeedKmh
                                     });
                                 }
                             }
                         }
                         
-                        const avgSpeedMs = totalTimeSeconds > 0 ? totalDistanceMeters / totalTimeSeconds : 0;
+                        const avgSpeedKmh = totalTimeSeconds > 0 ? (totalDistanceKm / totalTimeSeconds) * 3600 : 0;
 
                         return {
                             points: session,
                             stats: {
-                                distance: totalDistanceMeters / 1000,
+                                distance: totalDistanceKm,
                                 durationSeconds: totalTimeSeconds,
                                 pointCount: session.length,
                                 startTime: session[0] ? new Date(session[0].gps_time).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '',
-                                avgSpeedKmh: avgSpeedMs * 3.6,
-                                maxSpeedKmh: maxSpeedMs * 3.6,
+                                avgSpeedKmh: avgSpeedKmh,
+                                maxSpeedKmh: maxSpeedKmh,
                                 routeSegments
                             }
                         };
@@ -278,3 +325,5 @@ export default function PlaygroundPage() {
         </div>
     );
 }
+
+    
