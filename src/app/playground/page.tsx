@@ -2,14 +2,15 @@
 "use client";
 
 import { useState, useEffect, useMemo, FC } from 'react';
+import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Loader2, MapPin, Clock, Hash, MoveRight, Gauge, Waypoints, TrendingUp } from 'lucide-react';
+import { ArrowLeft, Loader2, Clock, Hash, MoveRight, Gauge, Waypoints, TrendingUp } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { formatDistanceStrict } from 'date-fns';
-import StaticMap from '@/components/playground-map';
+import 'leaflet/dist/leaflet.css';
 
 // --- Types ---
 type LocationData = {
@@ -21,7 +22,7 @@ type LocationData = {
 
 type Session = LocationData[];
 
-type RouteSegment = {
+export type RouteSegment = {
     coords: [number, number][];
     speedKmh: number;
 };
@@ -36,7 +37,7 @@ type SessionStats = {
     routeSegments: RouteSegment[];
 };
 
-type SessionWithStats = {
+export type SessionWithStats = {
     points: Session;
     stats: SessionStats;
 }
@@ -92,6 +93,12 @@ const SessionStatsDisplay: FC<{ session: SessionWithStats | null }> = ({ session
         </Card>
     );
 };
+
+// Dynamically import the map component to ensure it's only loaded on the client side
+const PlaygroundMap = dynamic(() => import('@/components/playground-map'), {
+    ssr: false,
+    loading: () => <div className="flex items-center justify-center h-full bg-muted/30 rounded-lg"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>,
+});
 
 
 export default function PlaygroundPage() {
@@ -267,7 +274,7 @@ export default function PlaygroundPage() {
                 </div>
 
                 <div className="md:col-span-2 bg-muted/20 border rounded-2xl shadow-inner p-2 relative overflow-hidden">
-                   <StaticMap session={selectedSession} />
+                   <PlaygroundMap session={selectedSession} />
                 </div>
             </main>
         </div>
