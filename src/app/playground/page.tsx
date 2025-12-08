@@ -6,7 +6,7 @@ import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Loader2, MapPin, Clock, Hash, MoveRight, Gauge, Waypoints } from 'lucide-react';
+import { ArrowLeft, Loader2, MapPin, Clock, Hash, MoveRight, Gauge, Waypoints, TrendingUp } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import type { LatLngExpression, Map as LeafletMap, Polyline as LeafletPolyline } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -29,15 +29,18 @@ type LocationData = {
 
 type Session = LocationData[];
 
+type SessionStats = {
+    distance: number; // in km
+    durationSeconds: number;
+    pointCount: number;
+    startTime: string;
+    avgSpeedKmh: number;
+    maxSpeedKmh: number; // in km/h
+};
+
 type SessionWithStats = {
     points: Session;
-    stats: {
-        distance: number; // in km
-        durationSeconds: number;
-        pointCount: number;
-        startTime: string;
-        avgSpeedKmh: number;
-    }
+    stats: SessionStats;
 }
 
 const SESSION_GAP_THRESHOLD_SECONDS = 5 * 60; // 5 minutes
@@ -65,23 +68,28 @@ function haversineDistance(coords1: { lat: number; lng: number }, coords2: { lat
 
 const SessionStatsDisplay: FC<{ session: SessionWithStats | null }> = ({ session }) => {
     if (!session) return null;
-    const { distance, avgSpeedKmh } = session.stats;
+    const { distance, avgSpeedKmh, maxSpeedKmh } = session.stats;
 
     return (
         <Card className="flex flex-col">
             <CardHeader>
                 <CardTitle>Session Stats</CardTitle>
             </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-4 text-center">
+            <CardContent className="grid grid-cols-3 gap-2 text-center">
                  <div className="flex flex-col items-center gap-1">
-                    <Waypoints className="h-6 w-6 text-primary" />
-                    <p className="text-2xl font-bold">{distance.toFixed(2)}</p>
-                    <p className="text-xs text-muted-foreground">Total Distance (km)</p>
+                    <Waypoints className="h-5 w-5 text-primary" />
+                    <p className="text-xl font-bold">{distance.toFixed(2)}</p>
+                    <p className="text-xs text-muted-foreground">Distance (km)</p>
                 </div>
                  <div className="flex flex-col items-center gap-1">
-                    <Gauge className="h-6 w-6 text-primary" />
-                    <p className="text-2xl font-bold">{avgSpeedKmh.toFixed(1)}</p>
+                    <Gauge className="h-5 w-5 text-primary" />
+                    <p className="text-xl font-bold">{avgSpeedKmh.toFixed(1)}</p>
                     <p className="text-xs text-muted-foreground">Avg Speed (km/h)</p>
+                </div>
+                <div className="flex flex-col items-center gap-1">
+                    <TrendingUp className="h-5 w-5 text-primary" />
+                    <p className="text-xl font-bold">{maxSpeedKmh.toFixed(1)}</p>
+                    <p className="text-xs text-muted-foreground">Max Speed (km/h)</p>
                 </div>
             </CardContent>
         </Card>
@@ -149,33 +157,13 @@ export default function PlaygroundPage() {
                 setIsLoading(true);
                 setError(null);
                 
-                let allData: LocationData[] = [];
-                let page = 0;
-                const pageSize = 1000;
-                let moreData = true;
+                let { data: allData, error } = await supabase
+                    .from('tracker_logs')
+                    .select('id, lat, lng, gps_time')
+                    .order('gps_time', { ascending: true });
 
-                while(moreData) {
-                    const from = page * pageSize;
-                    const to = from + pageSize - 1;
-
-                    const { data, error } = await supabase
-                        .from('tracker_logs')
-                        .select('id, lat, lng, gps_time')
-                        .order('gps_time', { ascending: true })
-                        .range(from, to);
-
-                    if (error) throw error;
-                    
-                    if (data) {
-                       allData = allData.concat(data as LocationData[]);
-                    }
-
-                    if (!data || data.length < pageSize) {
-                        moreData = false;
-                    } else {
-                        page++;
-                    }
-                }
+                if (error) throw error;
+                if (!allData) allData = [];
                 
                 if (allData.length > 0) {
                     const identifiedSessions: Session[] = [];
@@ -204,14 +192,22 @@ export default function PlaygroundPage() {
                     const sessionsWithStats: SessionWithStats[] = identifiedSessions.map(session => {
                         let totalDistanceMeters = 0;
                         let totalTimeSeconds = 0;
+                        let maxSpeedMs = 0;
+
                         for (let i = 1; i < session.length; i++) {
                             const p1 = session[i-1];
                             const p2 = session[i];
                             if (p1 && p2) {
-                                totalDistanceMeters += haversineDistance(p1, p2);
+                                const distance = haversineDistance(p1, p2);
+                                totalDistanceMeters += distance;
+
                                 const timeDiff = (new Date(p2.gps_time).getTime() - new Date(p1.gps_time).getTime()) / 1000;
                                 if (timeDiff > 0) {
                                     totalTimeSeconds += timeDiff;
+                                    const currentSpeedMs = distance / timeDiff;
+                                    if (currentSpeedMs > maxSpeedMs) {
+                                        maxSpeedMs = currentSpeedMs;
+                                    }
                                 }
                             }
                         }
@@ -225,7 +221,8 @@ export default function PlaygroundPage() {
                                 durationSeconds: totalTimeSeconds,
                                 pointCount: session.length,
                                 startTime: session[0] ? new Date(session[0].gps_time).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '',
-                                avgSpeedKmh: avgSpeedMs * 3.6
+                                avgSpeedKmh: avgSpeedMs * 3.6,
+                                maxSpeedKmh: maxSpeedMs * 3.6
                             }
                         };
                     }).reverse();
@@ -295,8 +292,8 @@ export default function PlaygroundPage() {
                                     <p className="text-sm text-destructive">{error}</p>
                                 ) : sessions.length > 0 ? (
                                     sessions.map((sessionWithStats, index) => (
-                                        <button key={index} onClick={() => setSelectedSession(sessionWithStats)} className="w-full text-left">
-                                            <Card className={`transition-all hover:border-primary ${selectedSession && selectedSession.points[0].id === sessionWithStats.points[0].id ? 'border-primary bg-primary/10' : ''}`}>
+                                        <button key={sessionWithStats.stats.startTime} onClick={() => setSelectedSession(sessionWithStats)} className="w-full text-left">
+                                            <Card className={`transition-all hover:border-primary ${selectedSession?.stats.startTime === sessionWithStats.stats.startTime ? 'border-primary bg-primary/10' : ''}`}>
                                                 <CardContent className="p-4">
                                                     <p className="font-semibold">Session {sessions.length - index}</p>
                                                     <div className="text-sm text-muted-foreground mt-2 space-y-1">
@@ -346,5 +343,3 @@ export default function PlaygroundPage() {
         </div>
     );
 }
-
-    
