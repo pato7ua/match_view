@@ -49,6 +49,7 @@ export type SessionWithStats = {
 
 const SESSION_GAP_THRESHOLD_SECONDS = 60; // 1 minute
 const MAX_REASONABLE_SPEED_KMH = 160; // ~100 mph
+const MIN_AVG_SPEED_KMH = 1; // Minimum average speed for a session to be considered valid
 
 // --- Utility Functions ---
 function haversineDistance(coords1: { lat: number; lng: number }, coords2: { lat: number; lng: number }): number {
@@ -145,7 +146,7 @@ export default function PlaygroundPage() {
                     identifiedSessions.push(currentSession);
                 }
 
-                // 2. Calculate stats for each session and filter out invalid ones
+                // 2. Calculate stats for each session
                 const sessionsWithStats: SessionWithStats[] = identifiedSessions.map(session => {
                     let totalDistanceKm = 0;
                     let maxSpeedKmh = 0;
@@ -189,7 +190,7 @@ export default function PlaygroundPage() {
                             routeSegments
                         }
                     };
-                }).filter(s => s.stats.distance > 0.01) // 3. Filter out tiny/noisy sessions
+                }).filter(s => s.stats.distance > 0.01 && s.stats.avgSpeedKmh > MIN_AVG_SPEED_KMH) // 3. Filter out tiny/noisy/stationary sessions
                   .reverse(); // Show most recent first
 
                 setSessions(sessionsWithStats); 
@@ -265,7 +266,7 @@ export default function PlaygroundPage() {
                                             </Card>
                                         </button>
                                     ))
-                                ) : <p className="text-muted-foreground">No sessions found.</p>
+                                ) : <p className="text-muted-foreground">No valid sessions found. Try adjusting filter constants.</p>
                             }
                                 </div>
                             </ScrollArea>
