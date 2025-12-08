@@ -135,17 +135,18 @@ const PlaygroundMap: React.FC<{ session: SessionWithStats | null }> = ({ session
         }
     }, [session]);
 
-    if (!session && typeof window !== 'undefined') {
-        return (
-            <div className="flex items-center justify-center h-full bg-muted/30 rounded-lg">
-                <MapPin className="h-8 w-8 text-muted-foreground" />
-                <p className="ml-2 text-muted-foreground">Select a session to see the route</p>
-            </div>
-        );
-    }
-    
     return (
-        <div ref={mapContainerRef} style={{ height: '100%', width: '100%', borderRadius: '1rem', backgroundColor: '#e0e0e0' }} />
+        <>
+            {!session && (
+                 <div className="absolute inset-0 z-10 flex items-center justify-center bg-muted/30 rounded-lg pointer-events-none">
+                    <div className="flex items-center">
+                        <MapPin className="h-8 w-8 text-muted-foreground" />
+                        <p className="ml-2 text-muted-foreground">Select a session to see the route</p>
+                    </div>
+                </div>
+            )}
+            <div ref={mapContainerRef} style={{ height: '100%', width: '100%', borderRadius: '1rem', backgroundColor: '#e0e0e0' }} />
+        </>
     );
 };
 
