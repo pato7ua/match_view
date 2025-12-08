@@ -8,10 +8,10 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Loader2, MapPin, Clock, Hash, MoveRight, Gauge, Waypoints, TrendingUp } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
-import type { LatLngExpression } from 'leaflet';
-import 'leaflet/dist/leaflet.css';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { formatDistanceStrict } from 'date-fns';
+import 'leaflet/dist/leaflet.css';
+
 
 // --- Types ---
 type LocationData = {
@@ -63,25 +63,18 @@ function haversineDistance(coords1: { lat: number; lng: number }, coords2: { lat
     return R * c; // Distance in meters
 }
 
-const getSpeedColor = (speedKmh: number) => {
-    if (speedKmh < 5) return '#3b82f6'; // Blue
-    if (speedKmh < 15) return '#22c55e'; // Green
-    if (speedKmh < 25) return '#f97316'; // Orange
-    return '#ef4444'; // Red
-}
 
 // --- Components ---
+const DynamicMap = dynamic(() => import('@/components/playground-map'), {
+  ssr: false,
+  loading: () => <MapPlaceholder />,
+});
 
 const MapPlaceholder = () => (
     <div className="flex items-center justify-center h-full">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
     </div>
 );
-
-const DynamicMap = dynamic(() => import('@/components/playground-map'), {
-  ssr: false,
-  loading: () => <MapPlaceholder />,
-});
 
 const SessionStatsDisplay: FC<{ session: SessionWithStats | null }> = ({ session }) => {
     if (!session) return null;

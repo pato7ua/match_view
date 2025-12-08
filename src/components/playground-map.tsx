@@ -31,29 +31,25 @@ const getSpeedColor = (speedKmh: number) => {
 
 // --- Map Components ---
 
-const UpdateMapCenter: FC<{ bounds: LatLngExpression[] }> = ({ bounds }) => {
+const RouteLayer: FC<{ session: SessionWithStats | null }> = ({ session }) => {
     const map = useMap();
-    useEffect(() => {
-        if (bounds.length > 0) {
-            map.fitBounds(bounds, { padding: [50, 50] });
-        }
-    }, [bounds, map]);
-    return null;
-};
-
-const PlaygroundMap: FC<{ session: SessionWithStats | null }> = ({ session }) => {
+    
     const bounds = useMemo(() => {
         if (!session || session.points.length === 0) return [];
         return session.points.map(p => [p.lat, p.lng] as [number, number]);
     }, [session]);
 
+    useEffect(() => {
+        if (bounds.length > 0) {
+            map.fitBounds(bounds, { padding: [50, 50] });
+        }
+    }, [bounds, map]);
+
+    if (!session) return null;
+
     return (
-        <MapContainer center={[51.505, -0.09]} zoom={13} scrollWheelZoom={true} style={{ height: '100%', width: '100%', borderRadius: '1rem' }}>
-            <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
-            {session && session.stats.routeSegments.map((segment, index) => (
+        <>
+            {session.stats.routeSegments.map((segment, index) => (
                 <Polyline
                     key={index}
                     positions={segment.coords as LatLngExpression[]}
@@ -61,7 +57,18 @@ const PlaygroundMap: FC<{ session: SessionWithStats | null }> = ({ session }) =>
                     weight={5}
                 />
             ))}
-            {bounds.length > 0 && <UpdateMapCenter bounds={bounds} />}
+        </>
+    );
+}
+
+const PlaygroundMap: FC<{ session: SessionWithStats | null }> = ({ session }) => {
+    return (
+        <MapContainer center={[51.505, -0.09]} zoom={13} scrollWheelZoom={true} style={{ height: '100%', width: '100%', borderRadius: '1rem' }}>
+            <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            <RouteLayer session={session} />
         </MapContainer>
     );
 };
