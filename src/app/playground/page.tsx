@@ -118,106 +118,83 @@ export default function PlaygroundPage() {
                     .order('gps_time', { ascending: true });
 
                 if (error) throw error;
-                if (!allData) allData = [];
-                
-                // --- 1. Filter out outliers ---
-                const filteredData: LocationData[] = [];
-                if (allData.length > 0) {
-                    filteredData.push(allData[0]); // Always include the first point
-                    for (let i = 1; i < allData.length; i++) {
-                        const p1 = filteredData[filteredData.length - 1]; // Compare with the last *valid* point
-                        const p2 = allData[i];
-                        if (p1 && p2) {
-                             const distanceKm = haversineDistance(p1, p2);
-                             const timeDiffSeconds = (new Date(p2.gps_time).getTime() - new Date(p1.gps_time).getTime()) / 1000;
-                             if (timeDiffSeconds > 0) {
-                                 const speedKmh = (distanceKm / timeDiffSeconds) * 3600;
-                                 if (speedKmh <= MAX_REASONABLE_SPEED_KMH) {
-                                     filteredData.push(p2);
-                                 }
-                             } else {
-                                // if time difference is zero, it's likely a duplicate point, keep it
-                                filteredData.push(p2);
-                             }
-                        }
-                    }
+                if (!allData || allData.length === 0) {
+                     setSessions([]);
+                     setIsLoading(false);
+                     return;
                 }
                 
-                const processedData = filteredData;
+                // 1. Split all data into sessions based on time gaps
+                const identifiedSessions: Session[] = [];
+                let currentSession: Session = [allData[0]];
 
+                for (let i = 1; i < allData.length; i++) {
+                    const prevPoint = allData[i - 1];
+                    const currentPoint = allData[i];
+                    
+                    const timeDiffSeconds = (new Date(currentPoint.gps_time).getTime() - new Date(prevPoint.gps_time).getTime()) / 1000;
 
-                if (processedData.length > 0) {
-                    const identifiedSessions: Session[] = [];
-                    let currentSession: Session = [processedData[0]];
-
-                    for (let i = 1; i < processedData.length; i++) {
-                        const prevPoint = processedData[i - 1];
-                        const currentPoint = processedData[i];
-                        if (!currentPoint || !prevPoint) continue;
-                        
-                        const timeDiffSeconds = (new Date(currentPoint.gps_time).getTime() - new Date(prevPoint.gps_time).getTime()) / 1000;
-
-                        if (timeDiffSeconds > SESSION_GAP_THRESHOLD_SECONDS) {
-                           if (currentSession.length > 1) identifiedSessions.push(currentSession);
-                           currentSession = [currentPoint];
-                        } else {
-                           currentSession.push(currentPoint);
-                        }
+                    if (timeDiffSeconds > SESSION_GAP_THRESHOLD_SECONDS) {
+                       if (currentSession.length > 1) identifiedSessions.push(currentSession);
+                       currentSession = [currentPoint];
+                    } else {
+                       currentSession.push(currentPoint);
                     }
-                    if (currentSession.length > 1) {
-                        identifiedSessions.push(currentSession);
-                    }
+                }
+                if (currentSession.length > 1) {
+                    identifiedSessions.push(currentSession);
+                }
 
-                    const sessionsWithStats: SessionWithStats[] = identifiedSessions.map(session => {
-                        let totalDistanceKm = 0;
-                        let maxSpeedKmh = 0;
-                        const routeSegments: RouteSegment[] = [];
+                // 2. Calculate stats for each session and filter out invalid ones
+                const sessionsWithStats: SessionWithStats[] = identifiedSessions.map(session => {
+                    let totalDistanceKm = 0;
+                    let maxSpeedKmh = 0;
+                    const routeSegments: RouteSegment[] = [];
 
-                        for (let i = 1; i < session.length; i++) {
-                            const p1 = session[i-1];
-                            const p2 = session[i];
-                            if (p1 && p2) {
-                                const distance = haversineDistance(p1, p2); // in km
-                                const timeDiff = (new Date(p2.gps_time).getTime() - new Date(p1.gps_time).getTime()) / 1000;
+                    for (let i = 1; i < session.length; i++) {
+                        const p1 = session[i-1];
+                        const p2 = session[i];
+                        const distance = haversineDistance(p1, p2); // in km
+                        const timeDiff = (new Date(p2.gps_time).getTime() - new Date(p1.gps_time).getTime()) / 1000;
 
-                                if (timeDiff > 0) {
-                                    totalDistanceKm += distance;
-                                    const currentSpeedKmh = (distance / timeDiff) * 3600;
-                                    
-                                    if (currentSpeedKmh > maxSpeedKmh && currentSpeedKmh <= MAX_REASONABLE_SPEED_KMH) {
-                                        maxSpeedKmh = currentSpeedKmh;
-                                    }
-                                    
-                                    routeSegments.push({
-                                        coords: [[p1.lat, p1.lng], [p2.lat, p2.lng]],
-                                        speedKmh: currentSpeedKmh
-                                    });
+                        if (timeDiff > 0) {
+                            const currentSpeedKmh = (distance / timeDiff) * 3600;
+                            
+                            // Only add to distance and segments if speed is reasonable
+                            if (currentSpeedKmh <= MAX_REASONABLE_SPEED_KMH) {
+                                totalDistanceKm += distance;
+                                routeSegments.push({
+                                    coords: [[p1.lat, p1.lng], [p2.lat, p2.lng]],
+                                    speedKmh: currentSpeedKmh
+                                });
+                                if (currentSpeedKmh > maxSpeedKmh) {
+                                    maxSpeedKmh = currentSpeedKmh;
                                 }
                             }
                         }
-                        
-                        const totalTimeSeconds = session.length > 1 ? (new Date(session[session.length - 1].gps_time).getTime() - new Date(session[0].gps_time).getTime()) / 1000 : 0;
-                        const avgSpeedKmh = totalTimeSeconds > 0 ? (totalDistanceKm / totalTimeSeconds) * 3600 : 0;
-
-                        return {
-                            points: session,
-                            stats: {
-                                distance: totalDistanceKm,
-                                durationSeconds: totalTimeSeconds,
-                                pointCount: session.length,
-                                startTime: session[0] ? new Date(session[0].gps_time).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '',
-                                avgSpeedKmh: avgSpeedKmh,
-                                maxSpeedKmh: maxSpeedKmh,
-                                routeSegments
-                            }
-                        };
-                    }).filter(s => s.stats.distance > 0.01) // Filter out tiny, stationary sessions
-                    .reverse();
-
-                    setSessions(sessionsWithStats); 
-                    if (sessionsWithStats.length > 0) {
-                        setSelectedSession(sessionsWithStats[0]);
                     }
+                    
+                    const totalTimeSeconds = (new Date(session[session.length - 1].gps_time).getTime() - new Date(session[0].gps_time).getTime()) / 1000;
+                    const avgSpeedKmh = totalTimeSeconds > 0 ? (totalDistanceKm / totalTimeSeconds) * 3600 : 0;
+
+                    return {
+                        points: session,
+                        stats: {
+                            distance: totalDistanceKm,
+                            durationSeconds: totalTimeSeconds,
+                            pointCount: session.length,
+                            startTime: session[0] ? new Date(session[0].gps_time).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '',
+                            avgSpeedKmh: avgSpeedKmh,
+                            maxSpeedKmh: maxSpeedKmh,
+                            routeSegments
+                        }
+                    };
+                }).filter(s => s.stats.distance > 0.01) // 3. Filter out tiny/noisy sessions
+                  .reverse(); // Show most recent first
+
+                setSessions(sessionsWithStats); 
+                if (sessionsWithStats.length > 0) {
+                    setSelectedSession(sessionsWithStats[0]);
                 }
 
             } catch (err: any) {
