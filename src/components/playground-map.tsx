@@ -41,6 +41,8 @@ const PlaygroundMap: React.FC<{ session: SessionWithStats | null }> = ({ session
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
             }).addTo(mapRef.current);
+            
+            layerGroupRef.current = L.layerGroup().addTo(mapRef.current);
         }
 
         // Cleanup on unmount
@@ -53,13 +55,9 @@ const PlaygroundMap: React.FC<{ session: SessionWithStats | null }> = ({ session
     }, []);
 
     useEffect(() => {
-        if (mapRef.current) {
+        if (mapRef.current && layerGroupRef.current) {
             // Clear previous route layers
-            if (layerGroupRef.current) {
-                layerGroupRef.current.clearLayers();
-            } else {
-                layerGroupRef.current = L.layerGroup().addTo(mapRef.current);
-            }
+            layerGroupRef.current.clearLayers();
 
             if (session) {
                 const bounds = session.points.map(p => [p.lat, p.lng] as [number, number]) as LatLngBoundsExpression;
