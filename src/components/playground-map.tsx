@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useEffect, useRef, memo } from 'react';
@@ -5,6 +6,16 @@ import L, { LatLngBoundsExpression } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { SessionWithStats, RouteSegment } from '@/app/playground/page';
 import { MapPin } from 'lucide-react';
+
+// Fix for default marker icon in Next.js
+// @ts-ignore
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+    iconRetinaUrl: require('leaflet/dist/images/marker-icon-2x.png'),
+    iconUrl: require('leaflet/dist/images/marker-icon.png'),
+    shadowUrl: require('leaflet/dist/images/marker-shadow.png'),
+});
+
 
 const getSpeedColor = (speedKmh: number): string => {
     if (speedKmh < 5) return '#3b82f6'; // Blue
@@ -30,15 +41,6 @@ const PlaygroundMap: React.FC<{ session: SessionWithStats | null }> = ({ session
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
             }).addTo(mapRef.current);
-            
-            // Fix for marker icons not appearing
-            // @ts-ignore
-            delete L.Icon.Default.prototype._getIconUrl;
-            L.Icon.Default.mergeOptions({
-                iconRetinaUrl: require('leaflet/dist/images/marker-icon-2x.png').default,
-                iconUrl: require('leaflet/dist/images/marker-icon.png').default,
-                shadowUrl: require('leaflet/dist/images/marker-shadow.png').default,
-            });
         }
 
         // Cleanup on unmount
@@ -86,7 +88,7 @@ const PlaygroundMap: React.FC<{ session: SessionWithStats | null }> = ({ session
         }
     }, [session]);
 
-    if (!session) {
+    if (!session && typeof window !== 'undefined') {
         return (
             <div className="flex items-center justify-center h-full bg-muted/30 rounded-lg">
                 <MapPin className="h-8 w-8 text-muted-foreground" />
