@@ -2,14 +2,14 @@
 "use client";
 
 import { useState, useEffect, useMemo, FC } from 'react';
-import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Loader2, Clock, Hash, MoveRight, Gauge, Waypoints, TrendingUp } from 'lucide-react';
+import { ArrowLeft, Loader2, Clock, Hash, MoveRight, Gauge, TrendingUp, Waypoints } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { formatDistanceStrict } from 'date-fns';
+import PlaygroundMap from '@/components/playground-map';
 
 // --- Types ---
 type LocationData = {
@@ -92,13 +92,6 @@ const SessionStatsDisplay: FC<{ session: SessionWithStats | null }> = ({ session
         </Card>
     );
 };
-
-// Dynamically import the map component to ensure it's only loaded on the client side
-const PlaygroundMap = dynamic(() => import('@/components/playground-map'), {
-    ssr: false,
-    loading: () => <div className="flex items-center justify-center h-full bg-muted/30 rounded-lg"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>,
-});
-
 
 export default function PlaygroundPage() {
     const [sessions, setSessions] = useState<SessionWithStats[]>([]);
