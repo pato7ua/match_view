@@ -28,6 +28,7 @@ const PlaygroundMap: React.FC<{ session: SessionWithStats | null }> = ({ session
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<L.Map | null>(null);
     const layerGroupRef = useRef<L.LayerGroup | null>(null);
+    const popupRef = useRef<L.Popup | null>(null);
 
     useEffect(() => {
         if (mapContainerRef.current && !mapRef.current) {
@@ -43,6 +44,50 @@ const PlaygroundMap: React.FC<{ session: SessionWithStats | null }> = ({ session
             }).addTo(mapRef.current);
             
             layerGroupRef.current = L.layerGroup().addTo(mapRef.current);
+
+             mapRef.current.on('click', (e) => {
+                if (!session || !mapRef.current) return;
+
+                let closestPoint = null;
+                let closestSegment = null;
+                let minDistance = Infinity;
+
+                session.stats.routeSegments.forEach((segment) => {
+                    const polyline = L.polyline(segment.coords);
+                    // Leaflet doesn't have a simple "closest point on polyline" function,
+                    // so we check distance to vertices as a simplification.
+                    segment.coords.forEach(coord => {
+                        const pointLatLng = L.latLng(coord[0], coord[1]);
+                        const distance = e.latlng.distanceTo(pointLatLng);
+                        if (distance < minDistance) {
+                            minDistance = distance;
+                            closestPoint = pointLatLng;
+                            closestSegment = segment;
+                        }
+                    })
+                });
+
+                if (closestPoint && closestSegment) {
+                    const pointIndex = session.points.findIndex(p => p.lat === closestPoint!.lat && p.lng === closestPoint!.lng);
+                    const pointData = pointIndex !== -1 ? session.points[pointIndex] : null;
+                    
+                    const content = `
+                        <div>
+                            <b>Time:</b> ${pointData ? new Date(pointData.gps_time).toLocaleTimeString() : 'N/A'}<br/>
+                            <b>Speed:</b> ${closestSegment.speedKmh.toFixed(1)} km/h
+                        </div>
+                    `;
+                    
+                    if (popupRef.current) {
+                        popupRef.current.setLatLng(closestPoint).setContent(content).openOn(mapRef.current);
+                    } else {
+                        popupRef.current = L.popup()
+                            .setLatLng(closestPoint)
+                            .setContent(content)
+                            .openOn(mapRef.current);
+                    }
+                }
+            });
         }
 
         // Cleanup on unmount
@@ -58,6 +103,10 @@ const PlaygroundMap: React.FC<{ session: SessionWithStats | null }> = ({ session
         if (mapRef.current && layerGroupRef.current) {
             // Clear previous route layers
             layerGroupRef.current.clearLayers();
+            if (popupRef.current) {
+                popupRef.current.remove();
+                popupRef.current = null;
+            }
 
             if (session) {
                 const bounds = session.points.map(p => [p.lat, p.lng] as [number, number]) as LatLngBoundsExpression;
