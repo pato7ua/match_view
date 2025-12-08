@@ -22,7 +22,7 @@ const Polyline = dynamic(() => import('react-leaflet').then(mod => mod.Polyline)
 // --- Types ---
 type LocationData = {
   id: number;
-  created_at: string;
+  gps_time: string;
   lat: number;
   lng: number;
 };
@@ -36,6 +36,7 @@ type SessionWithStats = {
         durationSeconds: number;
         pointCount: number;
         startTime: string;
+        avgSpeedKmh: number;
     }
 }
 
@@ -64,8 +65,7 @@ function haversineDistance(coords1: { lat: number; lng: number }, coords2: { lat
 
 const SessionStatsDisplay: FC<{ session: SessionWithStats | null }> = ({ session }) => {
     if (!session) return null;
-    const { distance, durationSeconds } = session.stats;
-    const avgSpeedKmh = durationSeconds > 0 ? (distance / (durationSeconds / 3600)) : 0;
+    const { distance, avgSpeedKmh } = session.stats;
 
     return (
         <Card className="flex flex-col">
@@ -89,7 +89,7 @@ const SessionStatsDisplay: FC<{ session: SessionWithStats | null }> = ({ session
 };
 
 
-const MapComponent: FC<{ session: Session | null }> = ({ session }) => {
+const MapComponent: FC<{ session: SessionWithStats | null }> = ({ session }) => {
     const mapRef = useRef<HTMLDivElement>(null);
     const mapInstance = useRef<LeafletMap | null>(null);
     const polylineRef = useRef<LeafletPolyline | null>(null);
@@ -160,15 +160,14 @@ export default function PlaygroundPage() {
 
                     const { data, error } = await supabase
                         .from('tracker_logs')
-                        .select('*')
-                        .order('created_at', { ascending: true })
+                        .select('id, lat, lng, gps_time')
+                        .order('gps_time', { ascending: true })
                         .range(from, to);
 
                     if (error) throw error;
                     
                     if (data) {
-                       const validPoints = data.filter(p => p.lat !== 0 && p.lng !== 0);
-                       allData = allData.concat(validPoints);
+                       allData = allData.concat(data as LocationData[]);
                     }
 
                     if (!data || data.length < pageSize) {
@@ -187,7 +186,7 @@ export default function PlaygroundPage() {
                         const currentPoint = allData[i];
                         if (!currentPoint || !prevPoint) continue;
                         
-                        const timeDiffSeconds = (new Date(currentPoint.created_at).getTime() - new Date(prevPoint.created_at).getTime()) / 1000;
+                        const timeDiffSeconds = (new Date(currentPoint.gps_time).getTime() - new Date(prevPoint.gps_time).getTime()) / 1000;
 
                         if (timeDiffSeconds > SESSION_GAP_THRESHOLD_SECONDS) {
                             if (currentSession.length > 1) {
@@ -210,20 +209,23 @@ export default function PlaygroundPage() {
                             const p2 = session[i];
                             if (p1 && p2) {
                                 totalDistanceMeters += haversineDistance(p1, p2);
-                                const timeDiff = (new Date(p2.created_at).getTime() - new Date(p1.created_at).getTime()) / 1000;
+                                const timeDiff = (new Date(p2.gps_time).getTime() - new Date(p1.gps_time).getTime()) / 1000;
                                 if (timeDiff > 0) {
                                     totalTimeSeconds += timeDiff;
                                 }
                             }
                         }
                         
+                        const avgSpeedMs = totalTimeSeconds > 0 ? totalDistanceMeters / totalTimeSeconds : 0;
+
                         return {
                             points: session,
                             stats: {
                                 distance: totalDistanceMeters / 1000,
                                 durationSeconds: totalTimeSeconds,
                                 pointCount: session.length,
-                                startTime: session[0] ? new Date(session[0].created_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : ''
+                                startTime: session[0] ? new Date(session[0].gps_time).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '',
+                                avgSpeedKmh: avgSpeedMs * 3.6
                             }
                         };
                     }).reverse();
