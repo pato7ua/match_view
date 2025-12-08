@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useMemo, FC } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
@@ -10,7 +10,7 @@ import { ArrowLeft, Loader2, Clock, Hash, MoveRight, Gauge, TrendingUp, Waypoint
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { formatDistanceStrict } from 'date-fns';
-// Import PlaygroundMap dynamically
+
 const PlaygroundMap = dynamic(() => import('@/components/playground-map'), {
     ssr: false,
     loading: () => <div className="flex items-center justify-center h-full bg-muted/30 rounded-lg"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>,
@@ -69,7 +69,7 @@ function haversineDistance(coords1: { lat: number; lng: number }, coords2: { lat
 
 
 // --- Components ---
-const SessionStatsDisplay: FC<{ session: SessionWithStats | null }> = ({ session }) => {
+const SessionStatsDisplay: React.FC<{ session: SessionWithStats | null }> = ({ session }) => {
     if (!session) return null;
     const { distance, avgSpeedKmh, maxSpeedKmh } = session.stats;
 
@@ -278,5 +278,3 @@ export default function PlaygroundPage() {
         </div>
     );
 }
-
-    

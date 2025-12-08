@@ -6,7 +6,7 @@ import { MapContainer, TileLayer, Polyline, useMap, CircleMarker, Tooltip } from
 import type { LatLngBoundsExpression } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { SessionWithStats, RouteSegment } from '@/app/playground/page';
-import { MapPin, Loader2 } from 'lucide-react';
+import { MapPin } from 'lucide-react';
 
 const getSpeedColor = (speedKmh: number): string => {
     if (speedKmh < 5) return '#3b82f6'; // Blue
@@ -26,11 +26,7 @@ const UpdateMapCenter: FC<{ bounds: LatLngBoundsExpression | null }> = memo(({ b
 });
 UpdateMapCenter.displayName = 'UpdateMapCenter';
 
-const RouteLayer: FC<{ session: SessionWithStats | null }> = memo(({ session }) => {
-    if (!session || session.points.length < 2) {
-        return <UpdateMapCenter bounds={null} />;
-    }
-
+const RouteLayer: FC<{ session: SessionWithStats }> = memo(({ session }) => {
     const bounds = session.points.map(p => [p.lat, p.lng] as [number, number]) as LatLngBoundsExpression;
     const startPoint = session.points[0];
     const endPoint = session.points[session.points.length - 1];
@@ -61,8 +57,8 @@ const RouteLayer: FC<{ session: SessionWithStats | null }> = memo(({ session }) 
 });
 RouteLayer.displayName = 'RouteLayer';
 
-
 const PlaygroundMap: FC<{ session: SessionWithStats | null }> = ({ session }) => {
+    
     if (!session) {
         return (
             <div className="flex items-center justify-center h-full bg-muted/30 rounded-lg">
@@ -83,12 +79,10 @@ const PlaygroundMap: FC<{ session: SessionWithStats | null }> = ({ session }) =>
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
-            <RouteLayer session={session} />
+            {session && <RouteLayer session={session} />}
         </MapContainer>
     );
 };
 
 
 export default memo(PlaygroundMap);
-
-    
