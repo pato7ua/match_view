@@ -3,7 +3,7 @@
 
 import Image from 'next/image';
 import { FC, useMemo } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, MapPin } from 'lucide-react';
 
 // --- Types ---
 type RouteSegment = {
@@ -150,5 +150,3 @@ const StaticMap: FC<{ session: SessionWithStats | null }> = ({ session }) => {
 };
 
 export default StaticMap;
-
-    
