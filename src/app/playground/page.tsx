@@ -89,7 +89,7 @@ const SessionStatsDisplay: FC<{ session: SessionWithStats | null }> = ({ session
                     <p className="text-xs text-muted-foreground">Distance (km)</p>
                 </div>
                  <div className="flex flex-col items-center gap-1">
-                    <Gauge className="h-5 w-5 text-primary" />
+                    <Gauge className="h-5- w-5 text-primary" />
                     <p className="text-xl font-bold">{avgSpeedKmh.toFixed(1)}</p>
                     <p className="text-xs text-muted-foreground">Avg Speed (km/h)</p>
                 </div>
@@ -122,7 +122,7 @@ const getSpeedColor = (speedKmh: number) => {
     return '#ef4444'; // Red
 }
 
-const MapComponent: FC<{ session: SessionWithStats | null }> = ({ session }) => {
+const RouteLayer: FC<{ session: SessionWithStats | null }> = ({ session }) => {
     const bounds = useMemo(() => {
         if (!session || session.points.length === 0) return undefined;
         const latLngs = session.points.map(p => [p.lat, p.lng] as [number, number]);
@@ -130,11 +130,7 @@ const MapComponent: FC<{ session: SessionWithStats | null }> = ({ session }) => 
     }, [session]);
 
     return (
-        <MapContainer center={[51.505, -0.09]} zoom={13} scrollWheelZoom={true} style={{ height: '100%', width: '100%', borderRadius: '1rem' }}>
-            <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
+        <>
             {session && session.stats.routeSegments.map((segment, index) => (
                 <Polyline
                     key={index}
@@ -144,6 +140,18 @@ const MapComponent: FC<{ session: SessionWithStats | null }> = ({ session }) => 
                 />
             ))}
             <UpdateMapCenter bounds={bounds} />
+        </>
+    );
+};
+
+const MapComponent: FC<{ session: SessionWithStats | null }> = ({ session }) => {
+    return (
+        <MapContainer center={[51.505, -0.09]} zoom={13} scrollWheelZoom={true} style={{ height: '100%', width: '100%', borderRadius: '1rem' }}>
+            <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            <RouteLayer session={session} />
         </MapContainer>
     );
 };
