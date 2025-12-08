@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo, FC } from 'react';
@@ -155,6 +154,11 @@ export default function PlaygroundPage() {
     const [selectedSession, setSelectedSession] = useState<SessionWithStats | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [isClient, setIsClient] = useState(false);
+
+    useEffect(() => {
+        setIsClient(true);
+    }, []);
     
     useEffect(() => {
         const fetchAndProcessData = async () => {
@@ -260,10 +264,6 @@ export default function PlaygroundPage() {
         fetchAndProcessData();
     }, []);
 
-    const [isClient, setIsClient] = useState(false);
-    useEffect(() => {
-        setIsClient(true);
-    }, []);
     
     const getSessionDuration = (session: SessionWithStats) => {
         const { durationSeconds } = session.stats;
@@ -356,5 +356,3 @@ export default function PlaygroundPage() {
         </div>
     );
 }
-
-    
