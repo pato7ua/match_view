@@ -49,7 +49,7 @@ export type SessionWithStats = {
 
 const SESSION_GAP_THRESHOLD_SECONDS = 5 * 60; // 5 minutes
 const MAX_REASONABLE_SPEED_KMH = 160; // Increased for car travel
-const MOVING_AVERAGE_WINDOW = 5;
+const MOVING_AVERAGE_WINDOW = 3;
 
 // --- Utility Functions ---
 function haversineDistance(coords1: { lat: number; lng: number }, coords2: { lat: number; lng: number }): number {
@@ -146,11 +146,11 @@ export default function PlaygroundPage() {
                 
                 // --- 2. Apply moving average to smooth flutter ---
                 let smoothedData: LocationData[] = [];
-                if (filteredData.length > MOVING_AVERAGE_WINDOW) {
+                if (filteredData.length >= MOVING_AVERAGE_WINDOW) {
                      smoothedData = filteredData.map((_point, i, arr) => {
                         if (i < MOVING_AVERAGE_WINDOW - 1) {
-                            // For the first few points, just return them as is
-                            return arr[i];
+                             // For the first few points, just return them as is, but create a copy
+                            return { ...arr[i] };
                         }
                         
                         // Get the window of points to average
@@ -166,7 +166,7 @@ export default function PlaygroundPage() {
                         };
                     });
                 } else {
-                    smoothedData.push(...filteredData);
+                    smoothedData.push(...filteredData.map(p => ({...p}))); // create copies
                 }
 
 
@@ -208,7 +208,7 @@ export default function PlaygroundPage() {
                                     totalDistanceKm += distance;
                                     const currentSpeedKmh = (distance / timeDiff) * 3600;
                                     
-                                    if (currentSpeedKmh > maxSpeedKmh) {
+                                    if (currentSpeedKmh > maxSpeedKmh && currentSpeedKmh <= MAX_REASONABLE_SPEED_KMH) {
                                         maxSpeedKmh = currentSpeedKmh;
                                     }
                                     
