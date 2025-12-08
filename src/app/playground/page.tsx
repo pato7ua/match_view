@@ -47,8 +47,8 @@ export type SessionWithStats = {
     stats: SessionStats;
 }
 
-const SESSION_GAP_THRESHOLD_SECONDS = 5 * 60; // 5 minutes
-const MAX_REASONABLE_SPEED_KMH = 160; // Increased for car travel
+const SESSION_GAP_THRESHOLD_SECONDS = 60; // 1 minute
+const MAX_REASONABLE_SPEED_KMH = 160; // ~100 mph
 
 // --- Utility Functions ---
 function haversineDistance(coords1: { lat: number; lng: number }, coords2: { lat: number; lng: number }): number {
