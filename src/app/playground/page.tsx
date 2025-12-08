@@ -1,14 +1,14 @@
 
 "use client";
 
-import { useState, useEffect, useMemo, FC, useRef } from 'react';
+import { useState, useEffect, useMemo, FC } from 'react';
 import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Loader2, MapPin, Clock, Hash, MoveRight, Gauge, Waypoints, TrendingUp } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
-import type { LatLngExpression, Map } from 'leaflet';
+import type { LatLngExpression } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { formatDistanceStrict } from 'date-fns';
@@ -63,8 +63,25 @@ function haversineDistance(coords1: { lat: number; lng: number }, coords2: { lat
     return R * c; // Distance in meters
 }
 
+const getSpeedColor = (speedKmh: number) => {
+    if (speedKmh < 5) return '#3b82f6'; // Blue
+    if (speedKmh < 15) return '#22c55e'; // Green
+    if (speedKmh < 25) return '#f97316'; // Orange
+    return '#ef4444'; // Red
+}
 
 // --- Components ---
+
+const MapPlaceholder = () => (
+    <div className="flex items-center justify-center h-full">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+    </div>
+);
+
+const DynamicMap = dynamic(() => import('@/components/playground-map'), {
+  ssr: false,
+  loading: () => <MapPlaceholder />,
+});
 
 const SessionStatsDisplay: FC<{ session: SessionWithStats | null }> = ({ session }) => {
     if (!session) return null;
@@ -95,65 +112,6 @@ const SessionStatsDisplay: FC<{ session: SessionWithStats | null }> = ({ session
         </Card>
     );
 };
-
-const getSpeedColor = (speedKmh: number) => {
-    if (speedKmh < 5) return '#3b82f6'; // Blue
-    if (speedKmh < 15) return '#22c55e'; // Green
-    if (speedKmh < 25) return '#f97316'; // Orange
-    return '#ef4444'; // Red
-}
-
-// --- Dynamic Imports for Leaflet components ---
-const MapContainer = dynamic(() => import('react-leaflet').then(mod => mod.MapContainer), { ssr: false });
-const TileLayer = dynamic(() => import('react-leaflet').then(mod => mod.TileLayer), { ssr: false });
-const Polyline = dynamic(() => import('react-leaflet').then(mod => mod.Polyline), { ssr: false });
-const useMap = dynamic(() => import('react-leaflet').then(mod => mod.useMap), { ssr: false });
-
-const UpdateMapCenter: FC<{ bounds: LatLngExpression[] }> = ({ bounds }) => {
-    const map = useMap();
-    useEffect(() => {
-        if (bounds.length > 0) {
-            map.fitBounds(bounds, { padding: [50, 50] });
-        }
-    }, [bounds, map]);
-    return null;
-};
-
-const MapComponent: FC<{ session: SessionWithStats | null }> = ({ session }) => {
-    const bounds = useMemo(() => {
-        if (!session || session.points.length === 0) return [];
-        return session.points.map(p => [p.lat, p.lng] as [number, number]);
-    }, [session]);
-
-    return (
-        <MapContainer center={[51.505, -0.09]} zoom={13} scrollWheelZoom={true} style={{ height: '100%', width: '100%', borderRadius: '1rem' }}>
-            <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
-            {session && session.stats.routeSegments.map((segment, index) => (
-                <Polyline
-                    key={index}
-                    positions={segment.coords as LatLngExpression[]}
-                    color={getSpeedColor(segment.speedKmh)}
-                    weight={5}
-                />
-            ))}
-            {bounds.length > 0 && <UpdateMapCenter bounds={bounds} />}
-        </MapContainer>
-    );
-};
-
-const MapPlaceholder = () => (
-    <div className="flex items-center justify-center h-full">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-    </div>
-);
-
-const DynamicMap = dynamic(() => Promise.resolve(MapComponent), {
-  ssr: false,
-  loading: () => <MapPlaceholder />,
-});
 
 
 export default function PlaygroundPage() {
@@ -217,7 +175,6 @@ export default function PlaygroundPage() {
 
                                     const currentSpeedMs = distance / timeDiff;
                                     
-                                    // Only consider speed realistic if time diff is not too small (e.g. > 0.5s) to avoid GPS jumps
                                     if (timeDiff > 0.5 && currentSpeedMs > maxSpeedMs) {
                                         maxSpeedMs = currentSpeedMs;
                                     }
@@ -330,19 +287,11 @@ export default function PlaygroundPage() {
                 </div>
 
                 <div className="md:col-span-2 bg-muted/20 border rounded-2xl shadow-inner p-2 relative overflow-hidden">
-                    {isLoading ? (
-                        <div className="absolute inset-0 flex items-center justify-center">
-                            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                        </div>
-                    ) : error ? (
-                            <div className="absolute inset-0 flex items-center justify-center">
-                            <p className="text-destructive text-center max-w-sm">{error}</p>
-                        </div>
-                    ) : (
-                        <DynamicMap session={selectedSession} />
-                    )}
+                   <DynamicMap session={selectedSession} />
                 </div>
             </main>
         </div>
     );
 }
+
+    
