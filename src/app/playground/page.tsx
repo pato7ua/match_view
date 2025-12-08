@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Loader2, Clock, Hash, MoveRight, Gauge, TrendingUp, Waypoints, MapPin } from 'lucide-react';
+import { ArrowLeft, Loader2, Clock, Hash, MoveRight, Gauge, TrendingUp, Waypoints } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { formatDistanceStrict } from 'date-fns';
@@ -48,7 +48,7 @@ export type SessionWithStats = {
 }
 
 const SESSION_GAP_THRESHOLD_SECONDS = 5 * 60; // 5 minutes
-const MAX_REASONABLE_SPEED_KMH = 50; // Filter out points that would require moving > 50 km/h
+const MAX_REASONABLE_SPEED_KMH = 160; // Increased for car travel
 const MOVING_AVERAGE_WINDOW = 5;
 
 // --- Utility Functions ---
@@ -126,41 +126,45 @@ export default function PlaygroundPage() {
                 if (allData.length > 0) {
                     filteredData.push(allData[0]); // Always include the first point
                     for (let i = 1; i < allData.length; i++) {
-                        const p1 = allData[i-1];
+                        const p1 = filteredData[filteredData.length - 1]; // Compare with the last *valid* point
                         const p2 = allData[i];
                         if (p1 && p2) {
                              const distanceKm = haversineDistance(p1, p2);
                              const timeDiffSeconds = (new Date(p2.gps_time).getTime() - new Date(p1.gps_time).getTime()) / 1000;
                              if (timeDiffSeconds > 0) {
                                  const speedKmh = (distanceKm / timeDiffSeconds) * 3600;
-                                 if (speedKmh < MAX_REASONABLE_SPEED_KMH) {
+                                 if (speedKmh <= MAX_REASONABLE_SPEED_KMH) {
                                      filteredData.push(p2);
                                  }
+                             } else {
+                                // if time difference is zero, it's likely a duplicate point, keep it for now, smoothing will handle it
+                                filteredData.push(p2);
                              }
                         }
                     }
                 }
                 
                 // --- 2. Apply moving average to smooth flutter ---
-                const smoothedData: LocationData[] = [];
+                let smoothedData: LocationData[] = [];
                 if (filteredData.length > MOVING_AVERAGE_WINDOW) {
-                    for (let i = 0; i < filteredData.length; i++) {
-                        if (i < MOVING_AVERAGE_WINDOW -1) {
-                             smoothedData.push(filteredData[i]);
-                        } else {
-                            let sumLat = 0;
-                            let sumLng = 0;
-                            for (let j = 0; j < MOVING_AVERAGE_WINDOW; j++) {
-                                sumLat += filteredData[i-j].lat;
-                                sumLng += filteredData[i-j].lng;
-                            }
-                            smoothedData.push({
-                                ...filteredData[i],
-                                lat: sumLat / MOVING_AVERAGE_WINDOW,
-                                lng: sumLng / MOVING_AVERAGE_WINDOW,
-                            });
+                     smoothedData = filteredData.map((_point, i, arr) => {
+                        if (i < MOVING_AVERAGE_WINDOW - 1) {
+                            // For the first few points, just return them as is
+                            return arr[i];
                         }
-                    }
+                        
+                        // Get the window of points to average
+                        const window = arr.slice(i - (MOVING_AVERAGE_WINDOW - 1), i + 1);
+                        
+                        const sumLat = window.reduce((acc, p) => acc + p.lat, 0);
+                        const sumLng = window.reduce((acc, p) => acc + p.lng, 0);
+
+                        return {
+                            ...arr[i], // Keep original timestamp and id
+                            lat: sumLat / MOVING_AVERAGE_WINDOW,
+                            lng: sumLng / MOVING_AVERAGE_WINDOW,
+                        };
+                    });
                 } else {
                     smoothedData.push(...filteredData);
                 }
@@ -190,7 +194,6 @@ export default function PlaygroundPage() {
 
                     const sessionsWithStats: SessionWithStats[] = identifiedSessions.map(session => {
                         let totalDistanceKm = 0;
-                        let totalTimeSeconds = 0;
                         let maxSpeedKmh = 0;
                         const routeSegments: RouteSegment[] = [];
 
@@ -203,11 +206,9 @@ export default function PlaygroundPage() {
 
                                 if (timeDiff > 0) {
                                     totalDistanceKm += distance;
-                                    totalTimeSeconds += timeDiff;
-
                                     const currentSpeedKmh = (distance / timeDiff) * 3600;
                                     
-                                    if (timeDiff > 0.5 && currentSpeedKmh > maxSpeedKmh) {
+                                    if (currentSpeedKmh > maxSpeedKmh) {
                                         maxSpeedKmh = currentSpeedKmh;
                                     }
                                     
@@ -219,6 +220,7 @@ export default function PlaygroundPage() {
                             }
                         }
                         
+                        const totalTimeSeconds = session.length > 1 ? (new Date(session[session.length - 1].gps_time).getTime() - new Date(session[0].gps_time).getTime()) / 1000 : 0;
                         const avgSpeedKmh = totalTimeSeconds > 0 ? (totalDistanceKm / totalTimeSeconds) * 3600 : 0;
 
                         return {
@@ -233,7 +235,8 @@ export default function PlaygroundPage() {
                                 routeSegments
                             }
                         };
-                    }).reverse();
+                    }).filter(s => s.stats.distance > 0.01) // Filter out tiny, stationary sessions
+                    .reverse();
 
                     setSessions(sessionsWithStats); 
                     if (sessionsWithStats.length > 0) {
@@ -325,5 +328,3 @@ export default function PlaygroundPage() {
         </div>
     );
 }
-
-    
