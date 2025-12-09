@@ -6,12 +6,17 @@ import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Loader2, Clock, Hash, MoveRight, Gauge, TrendingUp, Waypoints, Trash2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Clock, Hash, MoveRight, Gauge, TrendingUp, Waypoints, Trash2, Edit, Merge } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { formatDistanceStrict } from 'date-fns';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { Checkbox } from '@/components/ui/checkbox';
+import { AnimatePresence, motion } from 'framer-motion';
 
 
 const PlaygroundMap = dynamic(() => import('@/components/playground-map'), {
@@ -46,6 +51,8 @@ type SessionStats = {
 };
 
 export type SessionWithStats = {
+    id: string; // Using startTime as a unique ID
+    name: string;
     points: Session;
     stats: SessionStats;
 }
@@ -71,6 +78,50 @@ function haversineDistance(coords1: { lat: number; lng: number }, coords2: { lat
 
     return R * c; // Distance in kilometers
 }
+
+const calculateSessionStats = (session: Session, name?: string): SessionWithStats => {
+    let totalDistanceKm = 0;
+    let maxSpeedKmh = 0;
+    const routeSegments: RouteSegment[] = [];
+
+    for (let i = 1; i < session.length; i++) {
+        const p1 = session[i - 1];
+        const p2 = session[i];
+        const distance = haversineDistance(p1, p2);
+        const timeDiff = (new Date(p2.gps_time).getTime() - new Date(p1.gps_time).getTime()) / 1000;
+
+        if (timeDiff > 0 && timeDiff <= SESSION_GAP_THRESHOLD_SECONDS) {
+            const currentSpeedKmh = (distance / timeDiff) * 3600;
+            if (currentSpeedKmh <= MAX_REASONABLE_SPEED_KMH) {
+                totalDistanceKm += distance;
+                routeSegments.push({
+                    coords: [[p1.lat, p1.lng], [p2.lat, p2.lng]],
+                    speedKmh: currentSpeedKmh,
+                });
+                if (currentSpeedKmh > maxSpeedKmh) maxSpeedKmh = currentSpeedKmh;
+            }
+        }
+    }
+
+    const totalTimeSeconds = session.length > 1 ? (new Date(session[session.length - 1].gps_time).getTime() - new Date(session[0].gps_time).getTime()) / 1000 : 0;
+    const avgSpeedKmh = totalTimeSeconds > 0 ? (totalDistanceKm / totalTimeSeconds) * 3600 : 0;
+    const startTime = session[0] ? new Date(session[0].gps_time).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
+    
+    return {
+        id: startTime,
+        name: name || `Session @ ${startTime}`,
+        points: session,
+        stats: {
+            distance: totalDistanceKm,
+            durationSeconds: totalTimeSeconds,
+            pointCount: session.length,
+            startTime: startTime,
+            avgSpeedKmh: avgSpeedKmh,
+            maxSpeedKmh: maxSpeedKmh,
+            routeSegments,
+        },
+    };
+};
 
 
 // --- Components ---
@@ -109,8 +160,28 @@ export default function PlaygroundPage() {
     const [selectedSession, setSelectedSession] = useState<SessionWithStats | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    
+    // State for new features
     const [sessionToDelete, setSessionToDelete] = useState<SessionWithStats | null>(null);
+    const [sessionToRename, setSessionToRename] = useState<SessionWithStats | null>(null);
+    const [newSessionName, setNewSessionName] = useState('');
+    const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
+    
     const { toast } = useToast();
+
+    // Load session names from localStorage
+    const getSessionNames = (): Record<string, string> => {
+        if (typeof window === 'undefined') return {};
+        const names = localStorage.getItem('sessionNames');
+        return names ? JSON.parse(names) : {};
+    };
+    
+    // Save session names to localStorage
+    const saveSessionName = (sessionId: string, name: string) => {
+        const names = getSessionNames();
+        names[sessionId] = name;
+        localStorage.setItem('sessionNames', JSON.stringify(names));
+    };
 
     useEffect(() => {
         const fetchAndProcessData = async () => {
@@ -130,7 +201,7 @@ export default function PlaygroundPage() {
                      return;
                 }
                 
-                // 1. Split all data into sessions based on time gaps
+                const sessionNames = getSessionNames();
                 const identifiedSessions: Session[] = [];
                 let currentSession: Session = [allData[0]];
 
@@ -151,65 +222,13 @@ export default function PlaygroundPage() {
                     identifiedSessions.push(currentSession);
                 }
 
-                // 2. Calculate stats for each session
                 const sessionsWithStats: SessionWithStats[] = identifiedSessions.map(session => {
-                    let totalDistanceKm = 0;
-                    let maxSpeedKmh = 0;
-                    const routeSegments: RouteSegment[] = [];
-
-                    for (let i = 1; i < session.length; i++) {
-                        const p1 = session[i-1];
-                        const p2 = session[i];
-                        const distance = haversineDistance(p1, p2); // in km
-                        const timeDiff = (new Date(p2.gps_time).getTime() - new Date(p1.gps_time).getTime()) / 1000;
-
-                        if (timeDiff > 0) {
-                            const currentSpeedKmh = (distance / timeDiff) * 3600;
-                            
-                            // Only add to distance and segments if speed is reasonable
-                            if (currentSpeedKmh <= MAX_REASONABLE_SPEED_KMH) {
-                                totalDistanceKm += distance;
-                                routeSegments.push({
-                                    coords: [[p1.lat, p1.lng], [p2.lat, p2.lng]],
-                                    speedKmh: currentSpeedKmh
-                                });
-                                if (currentSpeedKmh > maxSpeedKmh) {
-                                    maxSpeedKmh = currentSpeedKmh;
-                                }
-                            }
-                        }
-                    }
-                    
-                    const totalTimeSeconds = (new Date(session[session.length - 1].gps_time).getTime() - new Date(session[0].gps_time).getTime()) / 1000;
-                    const avgSpeedKmh = totalTimeSeconds > 0 ? (totalDistanceKm / totalTimeSeconds) * 3600 : 0;
-
-                    return {
-                        points: session,
-                        stats: {
-                            distance: totalDistanceKm,
-                            durationSeconds: totalTimeSeconds,
-                            pointCount: session.length,
-                            startTime: session[0] ? new Date(session[0].gps_time).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '',
-                            avgSpeedKmh: avgSpeedKmh,
-                            maxSpeedKmh: maxSpeedKmh,
-                            routeSegments
-                        }
-                    };
+                    const startTime = session[0] ? new Date(session[0].gps_time).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
+                    const customName = sessionNames[startTime];
+                    return calculateSessionStats(session, customName);
                 }).filter(s => {
                     const stats = s.stats;
-                    // Basic sanity checks for a valid session
-                    if (stats.distance < 0.01 || stats.avgSpeedKmh < MIN_AVG_SPEED_KMH) {
-                        return false;
-                    }
-                    // Filter out sessions shorter than a minute
-                    if (stats.durationSeconds < 60) {
-                        return false;
-                    }
-                    // Filter out sessions with anomalous speed spikes (high max, low avg)
-                    if (stats.maxSpeedKmh > 100 && stats.avgSpeedKmh < 10) {
-                        return false;
-                    }
-                    return true;
+                    return stats.distance >= 0.01 && stats.avgSpeedKmh >= MIN_AVG_SPEED_KMH && stats.durationSeconds >= 60 && !(stats.maxSpeedKmh > 100 && stats.avgSpeedKmh < 10);
                 }) 
                   .reverse(); // Show most recent first
 
@@ -236,7 +255,25 @@ export default function PlaygroundPage() {
         const end = new Date(start.getTime() + durationSeconds * 1000);
         return formatDistanceStrict(end, start, { roundingMethod: 'round' });
     };
-
+    
+    const handleSelectSession = (session: SessionWithStats) => {
+        setSelectedSession(session);
+        setSelectedSessionIds(new Set());
+    }
+    
+    const handleToggleSelection = (sessionId: string) => {
+        setSelectedSessionIds(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(sessionId)) {
+                newSet.delete(sessionId);
+            } else {
+                newSet.add(sessionId);
+            }
+            return newSet;
+        });
+        setSelectedSession(null); // Deselect map view when multi-selecting
+    };
+    
     const handleDeleteSession = async () => {
         if (!sessionToDelete) return;
 
@@ -250,18 +287,53 @@ export default function PlaygroundPage() {
 
             if (error) throw error;
             
-            setSessions(prev => prev.filter(s => s.stats.startTime !== sessionToDelete.stats.startTime));
-            if (selectedSession?.stats.startTime === sessionToDelete.stats.startTime) {
+            setSessions(prev => prev.filter(s => s.id !== sessionToDelete.id));
+            if (selectedSession?.id === sessionToDelete.id) {
                 setSelectedSession(null);
             }
             setSessionToDelete(null);
-            toast({ title: "Session Deleted", description: `Session with ${pointIds.length} data points has been removed.` });
+            toast({ title: "Session Deleted", description: `Session "${sessionToDelete.name}" has been removed.` });
 
         } catch (err: any) {
             toast({ variant: 'destructive', title: "Deletion Failed", description: err.message || "Could not delete session." });
         }
     };
+    
+    const handleRenameSession = () => {
+        if (!sessionToRename || !newSessionName) return;
+        saveSessionName(sessionToRename.id, newSessionName);
+        setSessions(prev =>
+            prev.map(s => (s.id === sessionToRename.id ? { ...s, name: newSessionName } : s))
+        );
+        if (selectedSession?.id === sessionToRename.id) {
+            setSelectedSession(prev => prev ? { ...prev, name: newSessionName } : null);
+        }
+        toast({ title: 'Session Renamed', description: `Renamed to "${newSessionName}".` });
+        setSessionToRename(null);
+        setNewSessionName('');
+    };
 
+    const handleCombineSessions = () => {
+        if (selectedSessionIds.size < 2) return;
+
+        const sessionsToCombine = sessions.filter(s => selectedSessionIds.has(s.id));
+        const allPoints = sessionsToCombine.flatMap(s => s.points);
+        allPoints.sort((a, b) => new Date(a.gps_time).getTime() - new Date(b.gps_time).getTime());
+
+        const newCombinedSession = calculateSessionStats(allPoints);
+        
+        const newSessions = sessions.filter(s => !selectedSessionIds.has(s.id));
+        newSessions.unshift(newCombinedSession);
+        newSessions.sort((a, b) => new Date(b.stats.startTime).getTime() - new Date(a.stats.startTime).getTime());
+        
+        setSessions(newSessions);
+        setSelectedSessionIds(new Set());
+        setSelectedSession(newCombinedSession);
+        
+        toast({ title: 'Sessions Combined', description: `${sessionsToCombine.length} sessions were merged into one.` });
+    };
+    
+    const selectedSessionsForActions = sessions.filter(s => selectedSessionIds.has(s.id));
 
     return (
         <div className="flex h-dvh w-full flex-col overflow-hidden bg-background">
@@ -283,8 +355,8 @@ export default function PlaygroundPage() {
                      <Card className="flex flex-col flex-1 overflow-hidden">
                         <CardHeader>
                             <CardTitle>Tracking Sessions</CardTitle>
-                            <CardDescription>
-                                {isLoading ? "Loading sessions..." : `Found ${sessions.length} distinct sessions.`}
+                             <CardDescription>
+                                {isLoading ? "Loading sessions..." : selectedSessionIds.size > 0 ? `${selectedSessionIds.size} session(s) selected.` : `Found ${sessions.length} distinct sessions.`}
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="flex-1 overflow-hidden">
@@ -298,36 +370,83 @@ export default function PlaygroundPage() {
                                 ) : error ? (
                                     <p className="text-sm text-destructive">{error}</p>
                                 ) : sessions.length > 0 ? (
-                                    sessions.map((sessionWithStats, index) => (
-                                        <Card key={sessionWithStats.stats.startTime} className={`transition-all hover:border-primary relative group ${selectedSession?.stats.startTime === sessionWithStats.stats.startTime ? 'border-primary bg-primary/10' : ''}`}>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="absolute top-2 right-2 h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setSessionToDelete(sessionWithStats);
-                                                }}
-                                            >
-                                                <Trash2 className="h-4 w-4" />
-                                                <span className="sr-only">Delete session</span>
-                                            </Button>
-                                            <button onClick={() => setSelectedSession(sessionWithStats)} className="w-full text-left p-4 block">
-                                                <p className="font-semibold pr-8">Session {sessions.length - index}</p>
-                                                <div className="text-sm text-muted-foreground mt-2 space-y-1">
-                                                    <div className="flex items-center gap-2"><Clock className="h-3.5 w-3.5" /> <span>{sessionWithStats.stats.startTime}</span></div>
-                                                    <div className="flex items-center gap-2"><MoveRight className="h-3.5 w-3.5" /> <span>Duration: {getSessionDuration(sessionWithStats)}</span></div>
-                                                    <div className="flex items-center gap-2"><Hash className="h-3.5 w-3.5" /> <span>{sessionWithStats.stats.pointCount} data points</span></div>
+                                    sessions.map((sessionWithStats) => (
+                                        <div key={sessionWithStats.id} className="flex items-center gap-3">
+                                            <Checkbox
+                                                id={`select-${sessionWithStats.id}`}
+                                                checked={selectedSessionIds.has(sessionWithStats.id)}
+                                                onCheckedChange={() => handleToggleSelection(sessionWithStats.id)}
+                                            />
+                                            <Card className={`flex-1 transition-all hover:border-primary relative group ${selectedSession?.id === sessionWithStats.id ? 'border-primary bg-primary/10' : ''} ${selectedSessionIds.has(sessionWithStats.id) ? 'border-accent bg-accent/10' : ''}`}>
+                                                <div
+                                                    onClick={() => handleSelectSession(sessionWithStats)}
+                                                    className="w-full text-left p-4 cursor-pointer"
+                                                >
+                                                    <p className="font-semibold pr-8">{sessionWithStats.name}</p>
+                                                    <div className="text-sm text-muted-foreground mt-2 space-y-1">
+                                                        <div className="flex items-center gap-2"><Clock className="h-3.5 w-3.5" /> <span>{sessionWithStats.stats.startTime}</span></div>
+                                                        <div className="flex items-center gap-2"><MoveRight className="h-3.5 w-3.5" /> <span>Duration: {getSessionDuration(sessionWithStats)}</span></div>
+                                                        <div className="flex items-center gap-2"><Hash className="h-3.5 w-3.5" /> <span>{sessionWithStats.stats.pointCount} data points</span></div>
+                                                    </div>
                                                 </div>
-                                            </button>
-                                        </Card>
+                                            </Card>
+                                        </div>
                                     ))
-                                ) : <p className="text-muted-foreground">No valid sessions found. Try adjusting filter constants.</p>
+                                ) : <p className="text-muted-foreground">No valid sessions found.</p>
                             }
                                 </div>
                             </ScrollArea>
                         </CardContent>
                     </Card>
+                     <AnimatePresence>
+                        {selectedSessionIds.size > 0 && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: 10 }}
+                                transition={{ duration: 0.2 }}
+                            >
+                                <Card>
+                                    <CardHeader className="pb-4">
+                                        <CardTitle className="text-base">Actions</CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="flex gap-2">
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => {
+                                                if (selectedSessionsForActions.length === 1) {
+                                                    setSessionToRename(selectedSessionsForActions[0]);
+                                                    setNewSessionName(selectedSessionsForActions[0].name);
+                                                }
+                                            }}
+                                            disabled={selectedSessionIds.size !== 1}
+                                        >
+                                            <Edit className="mr-2 h-4 w-4" /> Rename
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            onClick={handleCombineSessions}
+                                            disabled={selectedSessionIds.size < 2}
+                                        >
+                                            <Merge className="mr-2 h-4 w-4" /> Combine
+                                        </Button>
+                                        <Button
+                                            variant="destructive"
+                                            className="ml-auto"
+                                            onClick={() => {
+                                                if (selectedSessionsForActions.length === 1) {
+                                                    setSessionToDelete(selectedSessionsForActions[0]);
+                                                }
+                                            }}
+                                            disabled={selectedSessionIds.size !== 1}
+                                        >
+                                            <Trash2 className="mr-2 h-4 w-4" /> Delete
+                                        </Button>
+                                    </CardContent>
+                                </Card>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
                     {selectedSession && <SessionStatsDisplay session={selectedSession} />}
                 </div>
 
@@ -345,11 +464,35 @@ export default function PlaygroundPage() {
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleDeleteSession}>Delete</AlertDialogAction>
+                        <AlertDialogAction onClick={handleDeleteSession} variant="destructive">Delete</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+            <Dialog open={!!sessionToRename} onOpenChange={(open) => { if (!open) setSessionToRename(null); }}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Rename Session</DialogTitle>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="session-name" className="text-right">Name</Label>
+                            <Input
+                                id="session-name"
+                                value={newSessionName}
+                                onChange={(e) => setNewSessionName(e.target.value)}
+                                className="col-span-3"
+                                onKeyDown={(e) => e.key === 'Enter' && handleRenameSession()}
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setSessionToRename(null)}>Cancel</Button>
+                        <Button onClick={handleRenameSession}>Save</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
+}
 
     
