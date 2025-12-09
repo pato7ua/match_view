@@ -55,6 +55,8 @@ export type SessionWithStats = {
     name: string;
     points: Session;
     stats: SessionStats;
+    isCombined?: boolean;
+    originalIds?: string[];
 }
 
 const SESSION_GAP_THRESHOLD_SECONDS = 60; // 1 minute
@@ -84,24 +86,30 @@ const calculateSessionStats = (session: Session, name?: string): SessionWithStat
     let maxSpeedKmh = 0;
     const routeSegments: RouteSegment[] = [];
 
-    for (let i = 1; i < session.length; i++) {
-        const p1 = session[i - 1];
-        const p2 = session[i];
-        const distance = haversineDistance(p1, p2);
-        const timeDiff = (new Date(p2.gps_time).getTime() - new Date(p1.gps_time).getTime()) / 1000;
+    if (session.length > 1) {
+        for (let i = 1; i < session.length; i++) {
+            const p1 = session[i - 1];
+            const p2 = session[i];
+            
+            if (!p1 || !p2) continue;
 
-        if (timeDiff > 0 && timeDiff <= SESSION_GAP_THRESHOLD_SECONDS) {
-            const currentSpeedKmh = (distance / timeDiff) * 3600;
-            if (currentSpeedKmh <= MAX_REASONABLE_SPEED_KMH) {
-                totalDistanceKm += distance;
-                routeSegments.push({
-                    coords: [[p1.lat, p1.lng], [p2.lat, p2.lng]],
-                    speedKmh: currentSpeedKmh,
-                });
-                if (currentSpeedKmh > maxSpeedKmh) maxSpeedKmh = currentSpeedKmh;
+            const distance = haversineDistance(p1, p2);
+            const timeDiff = (new Date(p2.gps_time).getTime() - new Date(p1.gps_time).getTime()) / 1000;
+
+            if (timeDiff > 0 && timeDiff <= SESSION_GAP_THRESHOLD_SECONDS) {
+                const currentSpeedKmh = (distance / timeDiff) * 3600;
+                if (currentSpeedKmh <= MAX_REASONABLE_SPEED_KMH) {
+                    totalDistanceKm += distance;
+                    routeSegments.push({
+                        coords: [[p1.lat, p1.lng], [p2.lat, p2.lng]],
+                        speedKmh: currentSpeedKmh,
+                    });
+                    if (currentSpeedKmh > maxSpeedKmh) maxSpeedKmh = currentSpeedKmh;
+                }
             }
         }
     }
+
 
     const totalTimeSeconds = session.length > 1 ? (new Date(session[session.length - 1].gps_time).getTime() - new Date(session[0].gps_time).getTime()) / 1000 : 0;
     const avgSpeedKmh = totalTimeSeconds > 0 ? (totalDistanceKm / totalTimeSeconds) * 3600 : 0;
@@ -169,18 +177,26 @@ export default function PlaygroundPage() {
     
     const { toast } = useToast();
 
-    // Load session names from localStorage
-    const getSessionNames = (): Record<string, string> => {
-        if (typeof window === 'undefined') return {};
-        const names = localStorage.getItem('sessionNames');
-        return names ? JSON.parse(names) : {};
+    // --- LocalStorage Persistence ---
+    const getFromStorage = <T,>(key: string, defaultValue: T): T => {
+        if (typeof window === 'undefined') return defaultValue;
+        const item = localStorage.getItem(key);
+        return item ? JSON.parse(item) : defaultValue;
     };
-    
-    // Save session names to localStorage
+    const saveToStorage = (key: string, value: any) => {
+        localStorage.setItem(key, JSON.stringify(value));
+    };
+
+    const getSessionNames = (): Record<string, string> => getFromStorage('sessionNames', {});
     const saveSessionName = (sessionId: string, name: string) => {
         const names = getSessionNames();
         names[sessionId] = name;
-        localStorage.setItem('sessionNames', JSON.stringify(names));
+        saveToStorage('sessionNames', names);
+    };
+
+    const getCombinedSessions = (): Record<string, string[]> => getFromStorage('combinedSessions', {});
+    const saveCombinedSessions = (combined: Record<string, string[]>) => {
+        saveToStorage('combinedSessions', combined);
     };
 
     useEffect(() => {
@@ -202,7 +218,7 @@ export default function PlaygroundPage() {
                 }
                 
                 const sessionNames = getSessionNames();
-                const identifiedSessions: Session[] = [];
+                let identifiedSessions: SessionWithStats[] = [];
                 let currentSession: Session = [allData[0]];
 
                 for (let i = 1; i < allData.length; i++) {
@@ -212,25 +228,42 @@ export default function PlaygroundPage() {
                     const timeDiffSeconds = (new Date(currentPoint.gps_time).getTime() - new Date(prevPoint.gps_time).getTime()) / 1000;
 
                     if (timeDiffSeconds > SESSION_GAP_THRESHOLD_SECONDS) {
-                       if (currentSession.length > 1) identifiedSessions.push(currentSession);
+                       if (currentSession.length > 1) {
+                         const stats = calculateSessionStats(currentSession);
+                         identifiedSessions.push({ ...stats, name: sessionNames[stats.id] || stats.name });
+                       }
                        currentSession = [currentPoint];
                     } else {
                        currentSession.push(currentPoint);
                     }
                 }
                 if (currentSession.length > 1) {
-                    identifiedSessions.push(currentSession);
+                    const stats = calculateSessionStats(currentSession);
+                    identifiedSessions.push({ ...stats, name: sessionNames[stats.id] || stats.name });
                 }
 
-                const sessionsWithStats: SessionWithStats[] = identifiedSessions.map(session => {
-                    const startTime = session[0] ? new Date(session[0].gps_time).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
-                    const customName = sessionNames[startTime];
-                    return calculateSessionStats(session, customName);
-                }).filter(s => {
+                // Apply combinations from localStorage
+                const combinedInfo = getCombinedSessions();
+                const combinedIds = new Set(Object.values(combinedInfo).flat());
+                let finalSessions: SessionWithStats[] = identifiedSessions.filter(s => !combinedIds.has(s.id));
+                
+                for (const [newId, originalIds] of Object.entries(combinedInfo)) {
+                    const sessionsToCombine = identifiedSessions.filter(s => originalIds.includes(s.id));
+                    if (sessionsToCombine.length > 0) {
+                        const allPoints = sessionsToCombine.flatMap(s => s.points);
+                        allPoints.sort((a, b) => new Date(a.gps_time).getTime() - new Date(b.gps_time).getTime());
+                        const customName = sessionNames[newId];
+                        const newCombinedSession = calculateSessionStats(allPoints, customName);
+                        finalSessions.push({ ...newCombinedSession, isCombined: true, originalIds });
+                    }
+                }
+
+                const sessionsWithStats: SessionWithStats[] = finalSessions.filter(s => {
                     const stats = s.stats;
                     return stats.distance >= 0.01 && stats.avgSpeedKmh >= MIN_AVG_SPEED_KMH && stats.durationSeconds >= 60 && !(stats.maxSpeedKmh > 100 && stats.avgSpeedKmh < 10);
                 }) 
-                  .reverse(); // Show most recent first
+                  .sort((a, b) => new Date(b.stats.startTime).getTime() - new Date(a.stats.startTime).getTime());
+
 
                 setSessions(sessionsWithStats); 
                 if (sessionsWithStats.length > 0) {
@@ -277,15 +310,27 @@ export default function PlaygroundPage() {
     const handleDeleteSession = async () => {
         if (!sessionToDelete) return;
 
-        const pointIds = sessionToDelete.points.map(p => p.id);
+        let pointIds: number[] = [];
+        let sessionIdsToDelete: string[] = [];
+
+        if (sessionToDelete.isCombined) {
+            sessionIdsToDelete = sessionToDelete.originalIds!;
+            const combinedInfo = getCombinedSessions();
+            delete combinedInfo[sessionToDelete.id];
+            saveCombinedSessions(combinedInfo);
+        } else {
+            sessionIdsToDelete = [sessionToDelete.id];
+        }
+        pointIds = sessionToDelete.points.map(p => p.id);
 
         try {
-            const { error } = await supabase
-                .from('tracker_logs')
-                .delete()
-                .in('id', pointIds);
-
-            if (error) throw error;
+            if (pointIds.length > 0) {
+                const { error } = await supabase
+                    .from('tracker_logs')
+                    .delete()
+                    .in('id', pointIds);
+                if (error) throw error;
+            }
             
             setSessions(prev => prev.filter(s => s.id !== sessionToDelete.id));
             if (selectedSession?.id === sessionToDelete.id) {
@@ -320,8 +365,23 @@ export default function PlaygroundPage() {
         const allPoints = sessionsToCombine.flatMap(s => s.points);
         allPoints.sort((a, b) => new Date(a.gps_time).getTime() - new Date(b.gps_time).getTime());
 
-        const newCombinedSession = calculateSessionStats(allPoints);
+        const newCombinedSessionStats = calculateSessionStats(allPoints);
+        const originalIds = sessionsToCombine.flatMap(s => s.isCombined ? s.originalIds! : [s.id]);
         
+        const newCombinedSession: SessionWithStats = {
+            ...newCombinedSessionStats,
+            isCombined: true,
+            originalIds: originalIds,
+        };
+        
+        // Update localStorage
+        const combinedInfo = getCombinedSessions();
+        sessionsToCombine.forEach(s => {
+            if (s.isCombined) delete combinedInfo[s.id];
+        });
+        combinedInfo[newCombinedSession.id] = originalIds;
+        saveCombinedSessions(combinedInfo);
+
         const newSessions = sessions.filter(s => !selectedSessionIds.has(s.id));
         newSessions.unshift(newCombinedSession);
         newSessions.sort((a, b) => new Date(b.stats.startTime).getTime() - new Date(a.stats.startTime).getTime());
