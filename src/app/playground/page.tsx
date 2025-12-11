@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+import { getSupabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/button';
@@ -204,6 +204,7 @@ export default function PlaygroundPage() {
             try {
                 setIsLoading(true);
                 setError(null);
+                const supabase = getSupabase();
                 
                 let { data: allData, error } = await supabase
                     .from('tracker_logs')
@@ -312,6 +313,7 @@ export default function PlaygroundPage() {
 
         let pointIds: number[] = [];
         let sessionIdsToDelete: string[] = [];
+        const supabase = getSupabase();
 
         if (sessionToDelete.isCombined) {
             sessionIdsToDelete = sessionToDelete.originalIds!;
@@ -554,5 +556,3 @@ export default function PlaygroundPage() {
         </div>
     );
 }
-
-    
